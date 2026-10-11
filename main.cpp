@@ -20,7 +20,9 @@
  *
  * The games are vertical. The Tate mode setting chooses between the picture
  * upright for a normal monitor (default) and the unrotated raster for a monitor
- * turned on its side; see galagino/galagino.h.
+ * turned on its side; see galagino/galagino.h. Upright, HSTX shows every row
+ * of the picture, scaled to the screen height by the video driver; PicoDVI
+ * leaves rows out to fit its 240 (see "Framebuffer access").
  */
 
 #include <cstdio>
@@ -168,9 +170,42 @@ const uint8_t g_available_screen_modes_galagino[] = {
 
 // ---------------------------------------------------------------------------
 // Framebuffer access: the one place the two video back-ends differ.
-// Both are a contiguous 320x240 16-bit buffer, RGB555 on HSTX and RGB444 on
-// PicoDVI.
+// Both are a contiguous 16-bit buffer, RGB555 on HSTX and RGB444 on PicoDVI,
+// of 320x240 pixels. Except on HSTX with Tate off: there the canvas is as tall
+// as the picture, TALL_W x gal_view_height() (288 or 256), and the driver
+// scales its rows to the 480 lines of the display (hstx_setFrameSize), so no
+// row is left out. The picture sits in the middle, between columns of 16
+// pixels that hold the FPS counter. It fits in the same memory.
 // ---------------------------------------------------------------------------
+#if HSTX
+#define TALL_W 256
+static_assert(TALL_W * 288 <= SCREENWIDTH * SCREENHEIGHT, "the tall canvas must fit the framebuffer");
+#endif
+static int fbWidth = SCREENWIDTH; // the canvas, and its stride
+static int fbHeight = SCREENHEIGHT;
+
+// Switches between the 320x240 canvas and the tall one. Returns true when it
+// changed, which leaves the screen black.
+static bool setTallCanvas(bool tall)
+{
+#if HSTX
+    const int w = tall ? TALL_W : SCREENWIDTH;
+    const int h = tall ? gal_view_height() : SCREENHEIGHT;
+    if (w == fbWidth && h == fbHeight)
+        return false;
+    // read with the other stride, the old picture would show as noise
+    memset(hstx_getframebuffer(), 0, SCREENWIDTH * SCREENHEIGHT * sizeof(uint16_t));
+    if (!hstx_setFrameSize(w, h))
+        panic("hstx_setFrameSize(%d, %d) failed\n", w, h);
+    fbWidth = w;
+    fbHeight = h;
+    return true;
+#else
+    (void)tall;
+    return false;
+#endif
+}
+
 static inline uint16_t *fbLine(int line)
 {
 #if HSTX
@@ -196,6 +231,7 @@ static inline uint16_t rgb(uint8_t r, uint8_t g, uint8_t b)
 // ---------------------------------------------------------------------------
 static void screenClear(uint16_t bg)
 {
+    setTallCanvas(false);
     for (int y = 0; y < SCREENHEIGHT; y++)
     {
         uint16_t *dst = fbLine(y);
@@ -204,10 +240,11 @@ static void screenClear(uint16_t bg)
     }
 }
 
-// col/row in 8x8 cells of the 40x30 screen; col < 0 centres the text.
+// col/row in 8x8 cells of the canvas (40x30 on the 320x240 one); col < 0
+// centres the text.
 static void screenText(int col, int row, const char *s, uint16_t fg, uint16_t bg)
 {
-    const int cols = SCREENWIDTH / FONT_CHAR_WIDTH;
+    const int cols = fbWidth / FONT_CHAR_WIDTH;
     const int len = (int)strlen(s);
     if (col < 0)
         col = (len < cols) ? (cols - len) / 2 : 0;
@@ -686,13 +723,20 @@ static void __noinline __not_in_flash_func(presentFrame)()
     if (state != State::Menu && state != State::Game)
         return;
     const uint64_t t0 = Frens::time_us();
-    const gal_orient_t orient = (gal_orient_t)settings.flags.tateMode;
+    gal_orient_t orient = (gal_orient_t)settings.flags.tateMode;
     const bool showFps = settings.flags.displayFrameRate;
+
+    // Tate off on HSTX: the tall canvas. Also follows the height of the picture
+    // from one game to the next.
+    if (setTallCanvas(HSTX && orient == GAL_ORIENT_UPRIGHT))
+        bordersValid = false;
+    if (fbWidth != SCREENWIDTH)
+        orient = GAL_ORIENT_UPRIGHT_FULL;
 
     bool repaint = false;
     if (!bordersValid || orient != bordersOrient || (fpsShown && !showFps))
     {
-        gal_render_borders(orient, fbLine(0), SCREENWIDTH);
+        gal_render_borders(orient, fbLine(0), fbWidth);
         bordersValid = true;
         bordersOrient = orient;
         repaint = true;
@@ -700,15 +744,16 @@ static void __noinline __not_in_flash_func(presentFrame)()
     fpsShown = showFps;
 
     if (state == State::Menu)
-        gal_menu_render(orient, fbLine(0), SCREENWIDTH, repaint);
+        gal_menu_render(orient, fbLine(0), fbWidth, repaint);
     else
-        gal_render(orient, fbLine(0), SCREENWIDTH);
+        gal_render(orient, fbLine(0), fbWidth);
 
     if (showFps)
     {
         char s[3] = {(char)('0' + (fps / 10) % 10), (char)('0' + fps % 10), 0};
         // In the left border: one cell in from the corner a TV that overscans
-        // cuts off when upright (48 px), at its edge in tate (16 px).
+        // cuts off when upright (48 px), at its edge in tate (16 px) and in the
+        // 16-px column of the tall canvas (64 px in from the screen edge).
         screenText(orient == GAL_ORIENT_UPRIGHT ? 1 : 0, 1, s, rgb(255, 255, 255), rgb(0, 0, 0));
     }
     lastDrawUs = (uint32_t)(Frens::time_us() - t0);
@@ -989,6 +1034,7 @@ static void processPerFrame()
         resetInputs();
         g_settings_visibility =
             (state == State::Game) ? g_settings_visibility_galagino_game : g_settings_visibility_galagino_menu;
+        setTallCanvas(false); // the settings menu draws on the 320x240 canvas
         int rval = showSettingsMenu(true);
 
         // menu.cpp saves only down the SAVE path; `settings` only ever holds

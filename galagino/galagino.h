@@ -9,10 +9,11 @@
  * headers.
  *
  * Video. Every game draws in upright coordinates, 224x288, the way Galagino
- * does, into a small band buffer that is then copied into the 320x240 canvas of
- * the framework in one of three orientations (gal_orient_t). The bands are
- * emitted so that canvas rows are written top to bottom: the canvas is single
- * buffered and is rewritten ahead of the scan-out.
+ * does, into a small band buffer that is then copied into the canvas of the
+ * framework in one of the orientations of gal_orient_t: the 320x240 canvas, or
+ * for GAL_ORIENT_UPRIGHT_FULL one as tall as the picture. The bands are emitted
+ * so that canvas rows are written top to bottom: the canvas is single buffered
+ * and is rewritten ahead of the scan-out.
  */
 #ifndef GALAGINO_H
 #define GALAGINO_H
@@ -45,12 +46,16 @@ typedef enum
     GAL_GAME_COUNT
 } gal_game_id_t;
 
-/* The value of settings.flags.tateMode. */
+/* The value of settings.flags.tateMode, plus GAL_ORIENT_UPRIGHT_FULL. */
 typedef enum
 {
     GAL_ORIENT_UPRIGHT = 0, /* Tate off: upright picture, 224x240 (1 row in 6 dropped) */
     GAL_ORIENT_TATE_CW = 1, /* Bottom left: raw 288x224 for a monitor turned clockwise */
-    GAL_ORIENT_TATE_CCW = 2 /* Bottom right: the same turned 180 degrees */
+    GAL_ORIENT_TATE_CCW = 2, /* Bottom right: the same turned 180 degrees */
+    /* Not a setting: Tate off on a display that scales the rows itself (HSTX).
+     * All rows of the picture, on a canvas `stride` pixels wide and
+     * gal_view_height() rows tall, the picture centred at x = (stride - 224) / 2. */
+    GAL_ORIENT_UPRIGHT_FULL = 3
 } gal_orient_t;
 
 /* Pixel format of the canvas: RGB555 on HSTX, RGB444 on PicoDVI, RGB565 on the host. */
@@ -190,6 +195,11 @@ void gal_render(gal_orient_t orient, uint16_t *fb, int stride);
 
 /* Paints everything outside the game area black. */
 void gal_render_borders(gal_orient_t orient, uint16_t *fb, int stride);
+
+/* The rows of the upright picture that are shown: 288 for the menu and the
+ * Namco boards, 256 for the Galaxian-class ones. The height of the canvas for
+ * GAL_ORIENT_UPRIGHT_FULL. */
+int gal_view_height(void);
 
 /* Bytes in use at the peak of the last gal_start, and the size, of the SRAM
  * arena and of the PSRAM block. */

@@ -10,6 +10,8 @@
  *
  * Options:
  *   --tate 0|1|2   Tate mode: 0 Off (default), 1 Bottom left, 2 Bottom right
+ *   --tall         Tate off as HSTX boards show it: every row of the picture,
+ *                  scaled to 480 lines by the driver's code (hstx_scale.h)
  *   --wav FILE     write the audio (mono, 16-bit, 44.1 kHz)
  *   --coin F       insert a coin at frame F (held for 4 frames)
  *   --start F      press 1P start at frame F (held for 4 frames)
@@ -22,7 +24,8 @@
  *                  programmed, as NOR flash does.
  *
  * Every dumped frame is outdir/frame_NNNNN.ppm (320x240, the canvas the board
- * shows). A summary line per second reports the time spent per frame.
+ * shows; with --tall the 640x480 the HSTX driver sends). A summary line per
+ * second reports the time spent per frame.
  */
 #include <ctype.h>
 #include <dirent.h>
@@ -33,10 +36,12 @@
 #include <time.h>
 
 #include "galagino.h"
+#include "hstx_scale.h"
 
 #define SAMPLERATE 44100
 #define SAMPLES_PER_FRAME 735
 #define MAX_KEYS 64
+#define TALL_W 256 /* the tall canvas of main.cpp */
 
 /* --- stdio implementation of gal_io_t ----------------------------------- */
 
@@ -147,6 +152,38 @@ static void write_ppm(const char *path, const uint16_t *fb)
     fclose(f);
 }
 
+/* --tall: a TALL_W x rows RGB555 canvas as the HSTX driver sends it, 640x480:
+ * the rows scaled to the lines, the pixels doubled between black borders. */
+static void write_ppm_tall(const char *path, const uint16_t *fb, int rows)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f)
+        return;
+    fprintf(f, "P6\n640 480\n255\n");
+    const int pairs = TALL_W / 2, border = (640 - 2 * TALL_W) / 2;
+    for (uint32_t line = 0; line < 480; line++)
+    {
+        uint32_t q, a[TALL_W / 2], b[TALL_W / 2];
+        uint16_t px[TALL_W];
+        const uint32_t row = hstx_scale_row(line, (uint32_t)rows, 480, &q);
+        memcpy(a, fb + row * TALL_W, sizeof(a));
+        if (q)
+        {
+            memcpy(b, fb + (row + 1) * TALL_W, sizeof(b));
+            hstx_scale_blend(a, a, b, pairs, q);
+        }
+        memcpy(px, a, sizeof(px));
+        for (int x = 0; x < 640; x++)
+        {
+            const uint16_t p = (x < border || x >= 640 - border) ? 0 : px[(x - border) / 2];
+            uint8_t rgb[3] = {(uint8_t)(((p >> 10) & 0x1f) * 255 / 31), (uint8_t)(((p >> 5) & 0x1f) * 255 / 31),
+                              (uint8_t)((p & 0x1f) * 255 / 31)};
+            fwrite(rgb, 1, 3, f);
+        }
+    }
+    fclose(f);
+}
+
 static void put16(FILE *f, uint16_t v)
 {
     fputc(v & 0xff, f);
@@ -208,7 +245,7 @@ int main(int argc, char **argv)
     const int frames = atoi(argv[3]);
     const int every = atoi(argv[4]);
     const char *outdir = "hosttest/out";
-    int tate = 0, coin_at = -1, start_at = -1, play_at = -1, no_psram = 0;
+    int tate = 0, tall = 0, coin_at = -1, start_at = -1, play_at = -1, no_psram = 0;
     const char *flash_path = NULL;
     int key_at[MAX_KEYS], key_mask[MAX_KEYS], nkeys = 0;
     const char *wav_path = NULL;
@@ -219,6 +256,8 @@ int main(int argc, char **argv)
     {
         if (!strcmp(argv[a], "--tate") && a + 1 < argc)
             tate = atoi(argv[++a]);
+        else if (!strcmp(argv[a], "--tall"))
+            tall = 1;
         else if (!strcmp(argv[a], "--wav") && a + 1 < argc)
             wav_path = argv[++a];
         else if (!strcmp(argv[a], "--coin") && a + 1 < argc)
@@ -248,7 +287,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    gal_init(GAL_FMT_RGB565, SAMPLERATE);
+    /* --tall blends RGB555, as the HSTX driver does */
+    gal_init(tall ? GAL_FMT_RGB555 : GAL_FMT_RGB565, SAMPLERATE);
     /* the board's PSRAM block */
     if (!no_psram)
         gal_set_psram(malloc(GAL_PSRAM_SIZE), GAL_PSRAM_SIZE);
@@ -331,7 +371,9 @@ int main(int argc, char **argv)
     double t_emu = 0, t_render = 0, t_emu_max = 0, t_render_max = 0;
     int peak = 0;
 
-    gal_render_borders((gal_orient_t)tate, fb, 320);
+    const gal_orient_t orient = tall ? GAL_ORIENT_UPRIGHT_FULL : (gal_orient_t)tate;
+    const int stride = tall ? TALL_W : 320;
+    gal_render_borders(orient, fb, stride);
     for (int f = 0; f < frames; f++)
     {
         uint16_t in = 0;
@@ -363,9 +405,9 @@ int main(int argc, char **argv)
             gal_run_frame(in, audio, SAMPLES_PER_FRAME);
         double t1 = now_s();
         if (menu_mode)
-            gal_menu_render((gal_orient_t)tate, fb, 320, f == 0);
+            gal_menu_render(orient, fb, stride, f == 0);
         else
-            gal_render((gal_orient_t)tate, fb, 320);
+            gal_render(orient, fb, stride);
         double t2 = now_s();
         t_emu += t1 - t0;
         t_render += t2 - t1;
@@ -390,7 +432,10 @@ int main(int argc, char **argv)
         {
             char path[1100];
             snprintf(path, sizeof(path), "%s/frame_%05d.ppm", outdir, f);
-            write_ppm(path, fb);
+            if (tall)
+                write_ppm_tall(path, fb, gal_view_height());
+            else
+                write_ppm(path, fb);
         }
         if ((f + 1) % 60 == 0)
         {

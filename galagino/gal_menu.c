@@ -176,6 +176,11 @@ static void put_row(gal_orient_t orient, uint16_t *fb, int stride, int y, const 
         memcpy(dst, line, GAL_W * sizeof(uint16_t));
         return;
     }
+    if (orient == GAL_ORIENT_UPRIGHT_FULL)
+    {
+        memcpy(fb + y * stride + (stride - GAL_W) / 2, line, GAL_W * sizeof(uint16_t));
+        return;
+    }
     const int x0 = (GAL_CANVAS_W - GAL_H) / 2, y0 = (GAL_CANVAS_H - GAL_W) / 2;
     for (int ux = 0; ux < GAL_W; ux++)
     {

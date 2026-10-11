@@ -144,7 +144,7 @@ All six games were made for a monitor mounted on its side. Pac-Man, Galaga and D
 
 | Tate mode | Picture | For |
 | --- | --- | --- |
-| Off (default) | Turned upright and shown in the centre of the screen. The 288 or 256 lines are fitted into the 240 of the screen by leaving out every sixth or every sixteenth line. | A normal monitor or TV |
+| Off (default) | Turned upright and shown in the centre of the screen. On boards with HSTX video output, all 288 or 256 lines are scaled to the height of the screen; a screen line that falls between two lines of the picture shows a mix of both. On boards with PicoDVI output, the lines are fitted into the 240 of the screen by leaving out every sixth or every sixteenth line. | A normal monitor or TV |
 | Bottom left | The original picture, unrotated and pixel exact. | A monitor turned 90 degrees clockwise, so that its bottom edge is on the left |
 | Bottom right | The same picture, rotated by 180 degrees. | A monitor turned 90 degrees counter-clockwise, so that its bottom edge is on the right |
 
@@ -211,7 +211,7 @@ hosttest/conv_check.py ~/roms/arcade path/to/galagino /tmp/conv_check
 ./hosttest/zex_host zexdoc.com zexall.com
 ```
 
-- `gal_host` takes the folder that holds the game folders, as on the SD card, and a game (its folder name) or `menu`. It loads the set through the same loader as the firmware, runs the given number of frames with scripted input, writes every Nth frame as a 320 x 240 PPM in the chosen orientation (`--tate 0|1|2`) and the sound as a WAV file. `--no-psram` runs it as a board without PSRAM, and `--flash FILE` with a flash copy of the sets, kept in FILE between runs.
+- `gal_host` takes the folder that holds the game folders, as on the SD card, and a game (its folder name) or `menu`. It loads the set through the same loader as the firmware, runs the given number of frames with scripted input, writes every Nth frame as a 320 x 240 PPM in the chosen orientation (`--tate 0|1|2`) and the sound as a WAV file. `--tall` writes instead the 640 x 480 picture that a board with HSTX video output shows with *Tate mode* off. `--no-psram` runs it as a board without PSRAM, and `--flash FILE` with a flash copy of the sets, kept in FILE between runs.
 - `conv_check.py` runs the converters of a Galagino checkout (`romconv/`) on the same ROM sets and compares every table they write with the one the emulator builds on the board.
 - `zex_host` runs the ZEXDOC and ZEXALL instruction exercisers on the Z80 core; the test programs are not part of this repository.
 

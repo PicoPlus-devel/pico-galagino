@@ -38,7 +38,7 @@ CORE=(
   third_party/miniz/miniz.c
 )
 
-gcc "${CFLAGS[@]}" hosttest/gal_host.c "${CORE[@]}" -lm -o hosttest/gal_host
+gcc "${CFLAGS[@]}" -I pico_shared/drivers/pico_hdmi hosttest/gal_host.c "${CORE[@]}" -lm -o hosttest/gal_host
 gcc "${CFLAGS[@]}" -DGAL_CONV_CHECK hosttest/conv_check.c "${CORE[@]}" -lm -o hosttest/conv_check
 gcc "${CFLAGS[@]}" -I hosttest hosttest/zex_host.c galagino/z80.c -o hosttest/zex_host
 echo "built hosttest/gal_host, hosttest/conv_check and hosttest/zex_host"

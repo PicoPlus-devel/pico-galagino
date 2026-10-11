@@ -294,6 +294,9 @@ void GAL_HOT(gal_run_frame)(uint16_t buttons, int16_t *audio, int n)
  * or every sixteenth (256); the picture sits at x = 48. Bands are 224x8, top
  * to bottom.
  *
+ * Upright full (HSTX): the same bands, no row dropped, on a canvas `stride`
+ * wide and view_h tall; the display scales the rows to its height.
+ *
  * Tate: the raw raster, view_h x 224, pixel exact, centred. A canvas row is a
  * column of the upright picture, so the bands are upright columns, 8 x view_h,
  * transposed into eight canvas rows each (y = uy - view_top):
@@ -321,15 +324,19 @@ static void view_of(int *top, int *h)
     }
 }
 
-static void GAL_HOT(put_band_upright)(const gal_band_t *b, int top, int h, uint16_t *fb, int stride)
+/* every: the row dropped out of `every`, or 0 to keep them all */
+static void GAL_HOT(put_band_upright)(const gal_band_t *b, int top, int every, uint16_t *fb, int stride, int x0)
 {
-    const int every = (h == GAL_H) ? 6 : 16; /* the row dropped out of `every` */
     for (int i = 0; i < b->h; i++)
     {
-        const int y = b->y0 + i - top;
-        if (y % every == every - 1)
-            continue;
-        uint16_t *dst = fb + (y - y / every) * stride + UPRIGHT_X0;
+        int y = b->y0 + i - top;
+        if (every)
+        {
+            if (y % every == every - 1)
+                continue;
+            y -= y / every;
+        }
+        uint16_t *dst = fb + y * stride + x0;
         const uint16_t *src = b->buf + i * b->w;
         if (((uintptr_t)dst | (uintptr_t)src) & 3)
         {
@@ -385,15 +392,18 @@ void GAL_HOT(gal_render)(gal_orient_t orient, uint16_t *fb, int stride)
     int top, h;
     view_of(&top, &h);
     gal_band_t b = {.buf = band_buf};
-    if (orient == GAL_ORIENT_UPRIGHT)
+    if (orient == GAL_ORIENT_UPRIGHT || orient == GAL_ORIENT_UPRIGHT_FULL)
     {
+        const int full = (orient == GAL_ORIENT_UPRIGHT_FULL);
+        const int every = full ? 0 : (h == GAL_H) ? 6 : 16;
+        const int x0 = full ? (stride - GAL_W) / 2 : UPRIGHT_X0;
         b.x0 = 0;
         b.w = GAL_W;
         b.h = 8;
         for (b.y0 = top; b.y0 < top + h; b.y0 += 8)
         {
             gal.ops->render_band(&b);
-            put_band_upright(&b, top, h, fb, stride);
+            put_band_upright(&b, top, every, fb, stride, x0);
         }
     }
     else
@@ -421,6 +431,13 @@ static void fill_rect(uint16_t *fb, int stride, int x, int y, int w, int h)
     }
 }
 
+int gal_view_height(void)
+{
+    int top, h;
+    view_of(&top, &h);
+    return h;
+}
+
 void gal_render_borders(gal_orient_t orient, uint16_t *fb, int stride)
 {
     int top, h;
@@ -430,6 +447,12 @@ void gal_render_borders(gal_orient_t orient, uint16_t *fb, int stride)
     {
         fill_rect(fb, stride, 0, 0, UPRIGHT_X0, GAL_CANVAS_H);
         fill_rect(fb, stride, UPRIGHT_X0 + GAL_W, 0, GAL_CANVAS_W - UPRIGHT_X0 - GAL_W, GAL_CANVAS_H);
+    }
+    else if (orient == GAL_ORIENT_UPRIGHT_FULL)
+    {
+        const int x0 = (stride - GAL_W) / 2;
+        fill_rect(fb, stride, 0, 0, x0, h);
+        fill_rect(fb, stride, x0 + GAL_W, 0, stride - x0 - GAL_W, h);
     }
     else
     {
