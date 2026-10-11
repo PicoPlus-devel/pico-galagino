@@ -371,14 +371,55 @@ static void g42_reset(void)
     gal.game_started = 1; /* as in Galagino */
 }
 
+/* Both CPUs spend most of a frame in a loop waiting for their next interrupt,
+ * and emulating that loop costs as much as real work. Interrupts are only
+ * raised between z80_run() calls, and with none pending a CPU in its wait loop
+ * stays there, so those cycles are skipped instead of run:
+ *   - the main CPU's task scheduler (0087-009a) scans the 16 task slots at
+ *     efc0, every fourth byte, for one of 20h or more. Once a scan comes up
+ *     empty only an interrupt handler can fill a slot: nothing else writes
+ *     the main CPU's RAM.
+ *   - the sound CPU waits in EI / JR $-1 (0064-0065).
+ * The set is matched by CRC, so these addresses are fixed. R is not kept up to
+ * date; neither program reads it. */
+static int GAL_HOT(main_idle)(const z80_t *cpu)
+{
+    if (cpu->irq_state || cpu->pc.w < 0x0087 || cpu->pc.w > 0x009a || cpu->sp.w != 0xefbe)
+        return 0;
+    for (int i = 0; i < 16; i++)
+        if (gal.ram[0x0fc0 + 4 * i] >= 0x20)
+            return 0;
+    return 1;
+}
+
+static int GAL_HOT(sound_idle)(const z80_t *cpu)
+{
+    return !cpu->irq_state && (cpu->pc.w == 0x0064 || cpu->pc.w == 0x0065);
+}
+
+static void GAL_HOT(run_cpu)(z80_t *cpu, int cycles, int idle)
+{
+    if (!idle)
+    {
+        z80_run(cpu, cycles);
+        return;
+    }
+    /* as if the loop had run for exactly `cycles` */
+    cpu->icount += cycles;
+    if (cpu->icount > 0)
+        cpu->icount = 0;
+}
+
 static void GAL_HOT(g42_run_slice)(int q)
 {
     for (int i = 0; i < STEPS_PER_QUARTER; i++)
     {
         const int step = q * STEPS_PER_QUARTER + i, steps = 4 * STEPS_PER_QUARTER;
-        z80_run(&gal.cpu[0], (step + 1) * MAIN_CYCLES_PER_FRAME / steps - step * MAIN_CYCLES_PER_FRAME / steps);
+        run_cpu(&gal.cpu[0], (step + 1) * MAIN_CYCLES_PER_FRAME / steps - step * MAIN_CYCLES_PER_FRAME / steps,
+                main_idle(&gal.cpu[0]));
         if (!g42.sub_cpu_reset)
-            z80_run(&gal.cpu[1], (step + 1) * SOUND_CYCLES_PER_FRAME / steps - step * SOUND_CYCLES_PER_FRAME / steps);
+            run_cpu(&gal.cpu[1], (step + 1) * SOUND_CYCLES_PER_FRAME / steps - step * SOUND_CYCLES_PER_FRAME / steps,
+                    sound_idle(&gal.cpu[1]));
     }
 
     /* the main CPU twice a frame: RST 10h and RST 08h */
@@ -434,6 +475,19 @@ static void GAL_HOT(g42_prepare_frame)(void)
     }
 }
 
+/* A row of a playfield tile, 16 pixels at 4 bits (3 used), the first one in
+ * the low bits of lo; written to d[0], d[step] ... d[15 * step]. */
+static inline __attribute__((always_inline)) void put_tile_row(uint16_t *d, const int step, uint32_t lo, uint32_t hi,
+                                                               const uint16_t *colors)
+{
+#pragma GCC unroll 8
+    for (int p = 0; p < 8; p++, lo >>= 4)
+        d[step * p] = colors[lo & 7];
+#pragma GCC unroll 8
+    for (int p = 8; p < 16; p++, hi >>= 4)
+        d[step * p] = colors[hi & 7];
+}
+
 /* One line of the playfield: 14 tiles of 16 pixels, opaque. */
 static void GAL_HOT(bg_line)(const gal_band_t *b, int y)
 {
@@ -456,22 +510,33 @@ static void GAL_HOT(bg_line)(const gal_band_t *b, int y)
         trow = j - lines2draw;
     }
 
-    uint16_t *dst = b->buf + (y - b->y0) * b->w;
+    /* dst[x] is pixel x of the picture */
+    uint16_t *dst = b->buf + (y - b->y0) * b->w - b->x0;
     const uint16_t *cmap = g42.cmap_tiles + (g42.palette & 15) * 32 * 8;
-    for (int x = b->x0; x < b->x0 + b->w;)
+    const int x0 = b->x0, x1 = b->x0 + b->w;
+    for (int col = x0 >> 4; col <= (x1 - 1) >> 4; col++)
     {
-        const int col = x >> 4;
         const uint8_t attr = gal.ram[addr + col + 16];
         const uint16_t *colors = cmap + 8 * (attr & 31);
         const int chr = gal.ram[addr + col] + ((attr & 0x80) << 1);
         /* attribute bit 5 flips the tile in y, bit 6 in x */
         const uint32_t *r = g42.tiles + 32 * chr + 2 * ((attr & 0x20) ? 15 - trow : trow);
-        const uint64_t pix = ((uint64_t)r[1] << 32) | r[0];
-        const int xend = (16 * col + 16 < b->x0 + b->w) ? 16 * col + 16 : b->x0 + b->w;
-        for (; x < xend; x++)
+        const uint32_t lo = r[0], hi = r[1];
+        uint16_t *d = dst + 16 * col;
+        if (16 * col >= x0 && 16 * col + 16 <= x1)
+        {
+            /* the whole tile: the band is the full width when upright */
+            if (attr & 0x40)
+                put_tile_row(d + 15, -1, lo, hi, colors);
+            else
+                put_tile_row(d, 1, lo, hi, colors);
+            continue;
+        }
+        const int xs = (16 * col > x0) ? 16 * col : x0, xe = (16 * col + 16 < x1) ? 16 * col + 16 : x1;
+        for (int x = xs; x < xe; x++)
         {
             const int p = (attr & 0x40) ? 15 - (x & 15) : (x & 15);
-            dst[x - b->x0] = colors[(pix >> (4 * p)) & 7];
+            d[x & 15] = colors[((p < 8 ? lo : hi) >> (4 * (p & 7))) & 7];
         }
     }
 }

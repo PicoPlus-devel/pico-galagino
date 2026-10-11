@@ -79,6 +79,7 @@
 static uint32_t CPUFreqKHz = GALAGINO_CLOCKFREQ_KHZ;
 
 static int16_t audioBuf[SAMPLES_PER_FRAME];
+static bool audioPending = false; // audioBuf holds a frame's sound, not pushed yet
 
 // What the board is showing.
 enum class State
@@ -512,13 +513,22 @@ static void startGame(int game)
 //     cushion, the frame pushes one sample less or one more. That matches the
 //     sink's clock to the emulated one: one sample per frame is 1360 ppm, far
 //     more than the two clocks differ.
-// The HSTX data-island queue manages its own level and is fed as it is.
+// The HSTX data-island queue plays its packets on the clock that also paces
+// the frames (see paceFrame()), so it needs no trim. It drops what goes over
+// its high watermark of 800 samples, little more than a frame, so it only gets
+// a small cushion: HSTX_CUSHION samples when it has run dry.
+//
+// A frame's sound is pushed at the start of the next frame, right after the
+// pace, not when the machine has made it: the time the machine takes varies
+// from frame to frame, the start of a frame does not. That keeps the bursts a
+// frame apart, which the small HSTX cushion relies on.
 //
 // Runs from SRAM (noinline, or it would be folded into the flash-resident
 // caller). From pico-mooncresta.
 // ---------------------------------------------------------------------------
 #define AUDIO_CUSHION 512   // ~12 ms
 #define AUDIO_TRIM_BAND 192 // drift tolerated before a frame is trimmed
+#define HSTX_CUSHION 32     // ~0.7 ms, 8 packets
 
 static inline int16_t applyGain(int x, int gainQ8)
 {
@@ -579,6 +589,11 @@ static void __noinline __not_in_flash_func(pushAudio)(const int16_t *buf, int n)
 #if HSTX
     if (!ext)
     {
+        if (hstx_di_queue_get_level() == 0)
+        {
+            for (int i = 0; i < HSTX_CUSHION; i++)
+                hstx_push_audio_sample(0, 0);
+        }
         for (int i = 0; i < n; i++)
         {
             int16_t s = mute ? 0 : buf[i];
@@ -873,29 +888,49 @@ static void wiipadPoll()
 #endif
 
 // ---------------------------------------------------------------------------
-// Frame pacing.
+// Frame pacing: one game frame per displayed frame, from the display's frame
+// counter.
 //
-// On PicoDVI with a framebuffer, pico_shared's PaceFrames60fps() busy-waits
-// for core1's vsync flag, which core0 misses about half the time; the DVI frame
-// counter cannot be missed. HSTX keeps PaceFrames60fps(). See pico-mooncresta.
+// The sound is made at 735 samples a frame, so this is what keeps it at 44.1
+// kHz: the HDMI audio packets are clocked from the same 60 Hz display.
+// pico_shared's PaceFrames60fps() does not fit either back-end: on HSTX it
+// paces at the PC Engine's 59.83 Hz, 0.3% fewer samples than HDMI plays and
+// more than the I2S trim in pushAudio() can make up, so both ran dry every few
+// seconds; on PicoDVI it busy-waits for core1's vsync flag, which core0 misses
+// about half the time.
+//
+// A frame that overruns a displayed frame is caught up by starting the next
+// one at once, so no sound is lost; one more than a frame behind, the missed
+// frames are dropped.
 // ---------------------------------------------------------------------------
-static void paceFrame(bool init)
+static inline uint32_t displayFrameCounter()
 {
 #if HSTX
-    Frens::PaceFrames60fps(init);
+    return hstx_getframecounter();
 #else
-    static uint32_t last = 0;
-    uint32_t now = dvi_->getFrameCounter();
-    if (!init)
-    {
-        while (now == last)
-        {
-            __compiler_memory_barrier(); // the counter is advanced by core1
-            now = dvi_->getFrameCounter();
-        }
-    }
-    last = now;
+    return dvi_->getFrameCounter();
 #endif
+}
+
+static void paceFrame(bool init)
+{
+    static uint32_t target = 0;
+    if (init)
+    {
+        target = displayFrameCounter();
+        return;
+    }
+    target++;
+    const int32_t lag = (int32_t)(displayFrameCounter() - target);
+    if (lag < 0)
+    {
+        while ((int32_t)(displayFrameCounter() - target) < 0)
+            __compiler_memory_barrier(); // the counter is advanced by core1
+    }
+    else if (lag > 0)
+    {
+        target = displayFrameCounter();
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -904,6 +939,13 @@ static void paceFrame(bool init)
 static void processPerFrame()
 {
     paceFrame(false);
+
+    // the sound of the frame made last time round; see pushAudio()
+    if (audioPending)
+    {
+        pushAudio(audioBuf, SAMPLES_PER_FRAME);
+        audioPending = false;
+    }
 
     presentFrame();
 
@@ -993,13 +1035,13 @@ static void processPerFrame()
 #else
         (void)t0;
 #endif
-        pushAudio(audioBuf, SAMPLES_PER_FRAME);
+        audioPending = true;
         break;
     }
     case State::Menu:
     {
         memset(audioBuf, 0, sizeof(audioBuf));
-        pushAudio(audioBuf, SAMPLES_PER_FRAME);
+        audioPending = true;
         const int game = gal_menu_frame(in);
         if (game >= 0)
         {

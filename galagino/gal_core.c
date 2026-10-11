@@ -305,7 +305,7 @@ void GAL_HOT(gal_run_frame)(uint16_t buttons, int16_t *audio, int n)
 #define UPRIGHT_X0 ((GAL_CANVAS_W - GAL_W) / 2) /* 48 */
 #define TATE_Y0 ((GAL_CANVAS_H - GAL_W) / 2)    /* 8 */
 
-static uint16_t band_buf[8 * GAL_H];
+static uint16_t __attribute__((aligned(4))) band_buf[8 * GAL_H];
 
 static void view_of(int *top, int *h)
 {
@@ -331,8 +331,24 @@ static void GAL_HOT(put_band_upright)(const gal_band_t *b, int top, int h, uint1
             continue;
         uint16_t *dst = fb + (y - y / every) * stride + UPRIGHT_X0;
         const uint16_t *src = b->buf + i * b->w;
-        for (int x = 0; x < GAL_W; x++)
-            dst[x] = src[x];
+        if (((uintptr_t)dst | (uintptr_t)src) & 3)
+        {
+            for (int x = 0; x < GAL_W; x++)
+                dst[x] = src[x];
+            continue;
+        }
+        /* the usual case, both word aligned: two pixels at a time, four
+         * words per pass (GAL_W / 2 is a multiple of 4) */
+        uint32_t *d = (uint32_t *)dst;
+        const uint32_t *s = (const uint32_t *)src;
+        for (int x = 0; x < GAL_W / 2; x += 4)
+        {
+            const uint32_t w0 = s[x], w1 = s[x + 1], w2 = s[x + 2], w3 = s[x + 3];
+            d[x] = w0;
+            d[x + 1] = w1;
+            d[x + 2] = w2;
+            d[x + 3] = w3;
+        }
     }
 }
 
