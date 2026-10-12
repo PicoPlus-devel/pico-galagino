@@ -1,6 +1,5 @@
 /*
- * picoGalagino - Galagino (Pac-Man, Galaga, Donkey Kong, Frogger, Dig Dug,
- * 1942) for RP2350 boards.
+ * picoGalagino - Galagino, from GalaginoPlus's set of games, for RP2350 boards.
  *
  * Boots the pico_shared framework, finds the games whose ROM sets are on the SD
  * card, shows Galagino's game menu and runs the chosen game (galagino/) one
@@ -14,9 +13,11 @@
  *   - each game reads its ROM set from its own folder below /roms/arcade: the
  *     MAME zip as is, or its files unzipped. The game menu lists the games whose
  *     sets are complete; without any, a screen names the folders.
- *   - on a board without PSRAM the sets are copied into flash at boot, before
- *     the display starts, once: the games then start from flash. That is also
- *     what lets 1942, too big for SRAM, run without PSRAM. See copyRomsToFlash().
+ *   - a large game, whose data does not fit in SRAM (1942), runs from PSRAM.
+ *     On a board without, it runs from a cache in flash, copied there the
+ *     first time it is started: the board restarts and copies the set before
+ *     the display starts. See "The flash cache".
+ *   - high scores are kept in /SAVES/GALAGINO, a file per game.
  *
  * The games are vertical. The Tate mode setting chooses between the picture
  * upright for a normal monitor (default) and the unrotated raster for a monitor
@@ -66,6 +67,13 @@
 #define GALAGINO_FRAME_STATS 0
 #endif
 
+// 1: use the flash cache on a board with PSRAM as well, as a board without it
+// does, ignoring the PSRAM. For testing the boards without PSRAM on one that
+// has it (the Fruit Jam).
+#ifndef GALAGINO_FLASH_CACHE_TEST
+#define GALAGINO_FLASH_CACHE_TEST 0
+#endif
+
 // Output gains in Q8 (256 = unity). Galagino's levels peak at about 0.4 (Pac-
 // Man) to 0.6 (Dig Dug) of full scale, which suits HDMI. The I2S DAC drives
 // the amplifier or headphones directly, with no volume stage after it, and was
@@ -94,9 +102,7 @@ enum class State
 static State state = State::NoGames;
 
 static bool sdOk = false;
-static uint32_t installed = 0;  // bit = gal_game_id_t, the complete sets
-static uint32_t flashGames = 0; // the games in the flash store
-static bool flashSynced = false;
+static gal_games_t installed = 0; // the games that can be played
 static bool showSettings = false;
 static uint32_t fps = 0;
 static uint64_t lastFrameUs = 0;
@@ -277,7 +283,6 @@ static void gameDir(int game, char *buf, size_t n)
 // No SD card, or no complete ROM set.
 static void drawNoGamesScreen()
 {
-    char buf[48];
     int row = 2;
 
     screenClear(SCR_BG);
@@ -286,23 +291,19 @@ static void drawNoGamesScreen()
     if (!sdOk)
     {
         screenText(1, row++, "No SD card found.", SCR_HI, SCR_BG);
-        row = 20;
     }
     else
     {
-        screenText(1, row++, "No game found. Copy a MAME zip, as it", SCR_HI, SCR_BG);
-        screenText(1, row++, "is or unzipped, to its folder:", SCR_HI, SCR_BG);
+        screenText(1, row++, "No game found.", SCR_HI, SCR_BG);
         row++;
-        for (int g = 0; g < GAL_GAME_COUNT; g++)
-        {
-            if (!gal_supported((gal_game_id_t)g))
-                continue;
-            snprintf(buf, sizeof(buf), "%-12s %s.zip", gal_games[g].title, gal_games[g].mameset);
-            screenText(2, row++, buf, SCR_FG, SCR_BG);
-            gameDir(g, buf, sizeof(buf));
-            screenText(4, row++, buf, SCR_FILE, SCR_BG);
-        }
+        screenText(1, row++, "Each game reads its MAME ROM set", SCR_FG, SCR_BG);
+        screenText(1, row++, "from its own folder, for example", SCR_FG, SCR_BG);
+        screenText(3, row++, ROMROOT "/GALAGA/galaga.zip", SCR_FILE, SCR_BG);
+        screenText(1, row++, "as a zip or unzipped. The README", SCR_FG, SCR_BG);
+        screenText(1, row++, "lists the folders and zips.", SCR_FG, SCR_BG);
         row++;
+        screenText(1, row++, "pico-bootLoader's updateAll fills", SCR_FG, SCR_BG);
+        screenText(1, row++, "a card with every set.", SCR_FG, SCR_BG);
     }
     screenText(1, 26, "SELECT+START opens settings, which", SCR_HI, SCR_BG);
     screenText(1, 27, "can enter USB drive mode.", SCR_HI, SCR_BG);
@@ -319,11 +320,7 @@ static void drawFailedScreen(int game, uint32_t found)
     snprintf(buf, sizeof(buf), "%s could not be started.", g->title);
     screenText(1, row++, buf, SCR_HI, SCR_BG);
     row++;
-    if (gal_set_complete((gal_game_id_t)game, found))
-    {
-        screenText(1, row++, "Not enough memory.", SCR_FG, SCR_BG);
-    }
-    else
+    if (!gal_set_complete((gal_game_id_t)game, found))
     {
         screenText(1, row++, "These files could not be read:", SCR_FG, SCR_BG);
         int shown = 0, missing = 0;
@@ -345,7 +342,27 @@ static void drawFailedScreen(int game, uint32_t found)
             screenText(1, row++, buf, SCR_FG, SCR_BG);
         }
     }
+    else if (gal_needs_copy((gal_game_id_t)game))
+    {
+        screenText(1, row++, "It could not be copied into flash.", SCR_FG, SCR_BG);
+    }
+    else
+    {
+        screenText(1, row++, "Not enough memory.", SCR_FG, SCR_BG);
+    }
     screenText(1, 27, "Press START to return to the menu.", SCR_HI, SCR_BG);
+}
+
+// A large game is about to be copied into flash: the board restarts for it.
+static void drawCopyScreen(int game)
+{
+    char buf[48];
+    screenClear(SCR_BG);
+    snprintf(buf, sizeof(buf), "%s runs from flash.", gal_games[game].title);
+    screenText(1, 10, buf, SCR_HI, SCR_BG);
+    screenText(1, 12, "Its ROM set is copied there once:", SCR_FG, SCR_BG);
+    screenText(1, 13, "the board restarts and copies it,", SCR_FG, SCR_BG);
+    screenText(1, 14, "which takes a few seconds.", SCR_FG, SCR_BG);
 }
 
 // ---------------------------------------------------------------------------
@@ -421,17 +438,40 @@ static void ffFree(void *ctx, void *p)
 static const gal_io_t romIo = {nullptr, ffListDir, ffOpen, ffSize, ffReadAt, ffClose, ffAlloc, ffFree};
 
 // ---------------------------------------------------------------------------
-// The flash store (boards without PSRAM).
+// The flash cache (boards without PSRAM).
 //
-// initAll() runs copyRomsToFlash() once the SD card is mounted, before the
-// display starts, so flash is erased and programmed with nothing else running.
-// It copies the complete sets that are not in flash yet, and leaves the ones
-// that are; see galagino/gal_flash.c. The store is the flash pico_shared sets
-// aside for roms on such boards, after the program (ROM_FILE_ADDR).
+// A large game runs from flash there; see galagino/gal_flash.c. Its set is
+// copied the first time it is started: startGame() notes the game in a watchdog
+// scratch register and restarts the board, and initAll() runs prepareFlash()
+// once the SD card is mounted, before the display starts, so flash is erased
+// and programmed with nothing else running. main() then starts the game at
+// once. Copying 1942 takes a few seconds; later starts are immediate.
 //
-// Copying all six games writes about 530 KB; the first boot with new sets takes
-// a few seconds longer, with the LED blinking. Later boots only check the CRCs.
+// The cache is the flash pico_shared sets aside for roms on such boards, after
+// the program (ROM_FILE_ADDR, maxRomSize). maxRomSize comes from the size the
+// flash chip itself reports (storage_get_flash_capacity(), from its JEDEC ID),
+// not from PICO_FLASH_SIZE_BYTES, which the board header may set lower than the
+// chip; CMakeLists.txt sets PICO_FLASH_SIZE_BYTES to 16 MB so that the SDK's
+// flash functions accept every offset of a larger chip.
+//
+// scratch[0..1]: picoGalagino's own (the SDK uses 4..7 to reboot, pico_shared
+// 6 and 7 for pico-bootLoader). They survive the watchdog restart, also when
+// pico-bootLoader resumes the application, and are cleared by a power cycle.
 // ---------------------------------------------------------------------------
+static constexpr uint32_t PENDING_COPY_MAGIC = 0x47414c50u; // "GALP"
+static int copiedGame = -1;   // the game copied at this boot, to start at once
+static uint32_t copyFound = 0; // its files found
+static bool cacheOpen = false;
+
+static int takePendingCopy()
+{
+    if (watchdog_hw->scratch[0] != PENDING_COPY_MAGIC)
+        return -1;
+    const uint32_t game = watchdog_hw->scratch[1];
+    watchdog_hw->scratch[0] = 0;
+    return game < GAL_GAME_COUNT ? (int)game : -1;
+}
+
 static void flashErase(uint32_t offset, uint32_t len)
 {
     Frens::flashEraseSafe(offset, len);
@@ -450,73 +490,183 @@ static void flashCopying(int game)
     printf("Copying %s to flash\n", gal_games[game].title);
 }
 
-static bool flashStore(gal_flash_t *fl)
+static void openFlashCache()
 {
-    if (Frens::isPsramEnabled() || !ROM_FILE_ADDR || maxRomSize <= 0)
-        return false;
-    fl->base = (const uint8_t *)ROM_FILE_ADDR;
-    fl->offset = (uint32_t)(ROM_FILE_ADDR - XIP_BASE);
-    fl->size = (uint32_t)maxRomSize;
-    fl->erase = flashErase;
-    fl->program = flashProgram;
-    fl->copying = flashCopying;
-    return true;
-}
-
-static void copyRomsToFlash()
-{
-    gal_flash_t fl;
-    if (!flashStore(&fl))
+#if GALAGINO_FLASH_CACHE_TEST
+    // pico_shared leaves these at 0 with PSRAM; place them as it does without
+    if (Frens::isPsramEnabled())
+    {
+        const uint32_t exp = Frens::storage_get_flash_jedec_id() & 0xff;
+        ROM_FILE_ADDR = FLASHPARAM_ADDRESS + FLASH_SECTOR_SIZE;
+        maxRomSize = (int)(XIP_BASE + (exp < 32 ? (1u << exp) : 0) - FLASH_RESERVED_TOP - ROM_FILE_ADDR);
+    }
+#else
+    if (Frens::isPsramEnabled())
         return;
-    const uint64_t t0 = Frens::time_us();
-    flashGames = gal_flash_sync(&fl, &romIo, ROMROOT);
-    flashSynced = true;
-    printf("Flash store: games %02lx in %lu ms (%lu of %lu KB)\n", (unsigned long)flashGames,
-           (unsigned long)((Frens::time_us() - t0) / 1000), (unsigned long)(gal_flash_size_needed() / 1024),
-           (unsigned long)(fl.size / 1024));
+#endif
+    if (cacheOpen || !ROM_FILE_ADDR || maxRomSize <= 0)
+        return;
+    uintptr_t end = ROM_FILE_ADDR + (uint32_t)maxRomSize;
+    if (end > XIP_BASE + 16 * 1024 * 1024) // the most XIP reaches
+        end = XIP_BASE + 16 * 1024 * 1024;
+    gal_flash_t fl;
+    fl.base = (const uint8_t *)ROM_FILE_ADDR;
+    fl.offset = (uint32_t)(ROM_FILE_ADDR - XIP_BASE);
+    fl.size = (uint32_t)(end - ROM_FILE_ADDR);
+    fl.erase = flashErase;
+    fl.program = flashProgram;
+    fl.copying = flashCopying;
+    gal_flash_open(&fl);
+    cacheOpen = true;
+    printf("Flash cache: %lu KB at 0x%08lx, holds %llx\n", (unsigned long)(fl.size / 1024),
+           (unsigned long)ROM_FILE_ADDR, (unsigned long long)gal_flash_games());
 }
 
-// The complete sets on the card, from the zip directories: nothing is loaded.
-// The games in the flash store need no card.
-static uint32_t probeGames()
+// initAll()'s pre-video-init task: a game waiting to be copied is copied now.
+static void prepareFlash()
 {
-    uint32_t mask = flashGames;
+    openFlashCache();
+    const int game = takePendingCopy();
+    if (game < 0 || !cacheOpen)
+        return;
+    char dir[48];
+    gameDir(game, dir, sizeof(dir));
+    const uint64_t t0 = Frens::time_us();
+    copyFound = gal_flash_copy((gal_game_id_t)game, &romIo, dir);
+    copiedGame = game;
+    printf("Copied %s to flash in %lu ms: %s\n", gal_games[game].title,
+           (unsigned long)((Frens::time_us() - t0) / 1000), gal_flash_holds((gal_game_id_t)game) ? "ok" : "FAILED");
+}
+
+// Restarts the board to copy the game into flash; see above.
+static void __attribute__((noreturn)) copyAndRestart(int game)
+{
+    drawCopyScreen(game);
+    sleep_ms(1500); // long enough to read
+    watchdog_hw->scratch[1] = (uint32_t)game;
+    watchdog_hw->scratch[0] = PENDING_COPY_MAGIC;
+    // watchdog_reboot(0,0,0), not watchdog_enable(): pico_shared would take
+    // the latter for a ROM picked in its browser, see menu.cpp.
+    watchdog_reboot(0, 0, 0);
+    while (true)
+        tight_loop_contents();
+}
+
+// The games that can be played: the complete sets on the card, from the zip
+// directories (nothing is loaded), and the games in the flash cache, which need
+// no card.
+static gal_games_t probeGames()
+{
+    gal_games_t mask = gal_flash_games();
     char dir[48];
     for (int g = 0; g < GAL_GAME_COUNT; g++)
     {
-        if (flashGames & (1u << g))
+        if (!gal_supported((gal_game_id_t)g))
+            continue;
+        if (mask & GAL_GAME_BIT(g))
         {
-            printf("%-12s in flash\n", gal_games[g].title);
+            printf("%-16s in flash\n", gal_games[g].title);
             continue;
         }
         if (!sdOk)
             continue;
         if (!gal_available((gal_game_id_t)g))
         {
-            // 1942 without PSRAM runs from the flash store only; its set was
-            // not found when the store was filled at boot
-            printf("%-12s not found\n", gal_games[g].title);
+            printf("%-16s needs PSRAM or a larger flash\n", gal_games[g].title);
             continue;
         }
         gameDir(g, dir, sizeof(dir));
         const uint32_t found = gal_probe((gal_game_id_t)g, &romIo, dir);
         const bool complete = gal_set_complete((gal_game_id_t)g, found);
-        printf("%-12s %s\n", gal_games[g].title, complete ? "found" : "not found");
+        printf("%-16s %s\n", gal_games[g].title, complete ? "found" : "not found");
         if (complete)
-            mask |= 1u << g;
+            mask |= GAL_GAME_BIT(g);
     }
     return mask;
+}
+
+// ---------------------------------------------------------------------------
+// High scores: a file per game, GAMESAVEDIR/GALAGINO/<folder>.HI, the bytes
+// the core reports (galagino.h). Read after a start or reset; written when the
+// core reports a change (it looks every 5 seconds), and before the game is
+// left, reset or the settings menu opens (which can restart the board).
+// ---------------------------------------------------------------------------
+#define HISCOREDIR GAMESAVEDIR "/GALAGINO"
+static uint8_t hiscoreBuf[GAL_HISCORE_MAX];
+
+static void hiscorePath(char *buf, size_t n, int game)
+{
+    snprintf(buf, n, HISCOREDIR "/%s.HI", gal_games[game].folder);
+}
+
+static void hiscoreLoad()
+{
+    const int game = gal_running();
+    const int size = gal_hiscore_size();
+    if (game < 0 || !size || !sdOk)
+        return;
+    char path[48];
+    hiscorePath(path, sizeof(path), game);
+    FIL *fil = (FIL *)Frens::f_malloc(sizeof(FIL));
+    UINT br = 0;
+    if (fil && f_open(fil, path, FA_READ) == FR_OK)
+    {
+        if (f_size(fil) == (FSIZE_t)size && f_read(fil, hiscoreBuf, size, &br) == FR_OK && (int)br == size)
+        {
+            gal_hiscore_load(hiscoreBuf);
+            printf("High scores read from %s\n", path);
+        }
+        f_close(fil);
+    }
+    Frens::f_free(fil);
+}
+
+static void hiscoreSave()
+{
+    const int game = gal_running();
+    const int size = gal_hiscore_size();
+    if (game < 0 || !size || !sdOk)
+        return;
+    f_mkdir(GAMESAVEDIR);
+    f_mkdir(HISCOREDIR);
+    char path[48];
+    hiscorePath(path, sizeof(path), game);
+    FIL *fil = (FIL *)Frens::f_malloc(sizeof(FIL));
+    UINT bw = 0;
+    if (fil && f_open(fil, path, FA_WRITE | FA_CREATE_ALWAYS) == FR_OK)
+    {
+        f_write(fil, hiscoreBuf, size, &bw);
+        f_close(fil);
+    }
+    Frens::f_free(fil);
+    printf("High scores %s %s\n", (int)bw == size ? "saved to" : "NOT saved to", path);
+}
+
+// Before the game is left or reset: the table as it is now.
+static void hiscoreFlush()
+{
+    if (gal_running() >= 0 && gal_hiscore_flush(hiscoreBuf))
+        hiscoreSave();
 }
 
 static void enterMenu()
 {
     gal_stop();
+    if (!installed)
+    {
+        // after a game that could not be copied into flash, say
+        state = State::NoGames;
+        drawNoGamesScreen();
+        return;
+    }
     gal_menu_init(installed);
     state = State::Menu;
 }
 
 static void startGame(int game)
 {
+    if (gal_needs_copy((gal_game_id_t)game) && gal_flash_room((gal_game_id_t)game) && sdOk)
+        copyAndRestart(game);
     char dir[48];
     gameDir(game, dir, sizeof(dir));
     printf("Starting %s from %s\n", gal_games[game].title, dir);
@@ -528,6 +678,7 @@ static void startGame(int game)
            (unsigned long)gal_psram_size());
     if (gal_running() == game)
     {
+        hiscoreLoad();
         state = State::Game;
         return;
     }
@@ -693,10 +844,28 @@ static int bordersOrient = -1;
 static bool fpsShown = false;
 
 #if GALAGINO_FRAME_STATS
+#include "hardware/structs/m33.h"
+#include "hardware/clocks.h"
+
+// gal_internal.h's profiling: cycles per part of a frame, from the DWT cycle
+// counter
+extern "C" uint32_t gal_prof[8];
+extern "C" uint32_t gal_cycles(void)
+{
+    return m33_hw->dwt_cyccnt;
+}
+
+static void statsStartCounter()
+{
+    m33_hw->demcr |= M33_DEMCR_TRCENA_BITS;
+    m33_hw->dwt_ctrl |= M33_DWT_CTRL_CYCCNTENA_BITS;
+}
+
 static struct
 {
     uint32_t frames, emu_sum, emu_max, draw_sum, draw_max;
-} stats;
+    uint32_t idle_sum, idle_min, late; // paceFrame(): the wait for the display
+} stats = {0, 0, 0, 0, 0, 0, UINT32_MAX, 0};
 
 static void statsAdd(uint32_t emu, uint32_t draw)
 {
@@ -711,7 +880,19 @@ static void statsAdd(uint32_t emu, uint32_t draw)
         printf("frame stats: emulate %lu us (max %lu), draw %lu us (max %lu), %lu fps\n",
                (unsigned long)(stats.emu_sum / stats.frames), (unsigned long)stats.emu_max,
                (unsigned long)(stats.draw_sum / stats.frames), (unsigned long)stats.draw_max, (unsigned long)fps);
+        // the parts, in us a frame: run_slice, sound, then the game's own
+        const uint32_t mhz = clock_get_hz(clk_sys) / 1000000;
+        printf("  idle us: avg %lu min %lu, late frames %lu\n", (unsigned long)(stats.idle_sum / stats.frames),
+               (unsigned long)stats.idle_min, (unsigned long)stats.late);
+        printf("  parts us:");
+        for (int i = 0; i < 8; i++)
+        {
+            printf(" %lu", (unsigned long)(gal_prof[i] / mhz / stats.frames));
+            gal_prof[i] = 0;
+        }
+        printf("\n");
         memset(&stats, 0, sizeof(stats));
+        stats.idle_min = UINT32_MAX;
     }
 }
 #endif
@@ -821,12 +1002,13 @@ static uint32_t readPads(uint16_t wii, uint32_t *pad2)
 }
 
 // Maps the pad onto the cabinet:
-//   d-pad       joystick        A (or X)  fire       B (or Y)  fire (1942: loop)
+//   d-pad       joystick        A (or X)  fire       B (or Y)  fire, or the game's
+//                                                              second button (1942: loop)
 //   SELECT      coin            START     1 player   START on a second USB pad: 2 players
 //
 // A and B both press fire, each with its own rapid fire setting, so one of them
-// can fire single shots and the other automatically. In 1942, B is the loop
-// button instead.
+// can fire single shots and the other automatically. In a game with a second
+// button of its own (gal_has_extra_button: 1942's loop), B is that instead.
 //
 // SELECT doubles as the modifier of SELECT+START (settings menu), so the coin
 // is inserted when SELECT is released, and only if no other button was pressed
@@ -902,7 +1084,7 @@ static uint16_t mapInputs(uint32_t buttons, uint32_t pad2)
     }
     if (buttons & (B::B | B::Y))
     {
-        if (gal_running() == GAL_GAME_1942)
+        if (gal_running() >= 0 && gal_has_extra_button((gal_game_id_t)gal_running()))
             in |= GAL_BTN_EXTRA;
         else if (!settings.flags.rapidFireOnB || rapidPhase)
             in |= GAL_BTN_FIRE;
@@ -967,6 +1149,9 @@ static void paceFrame(bool init)
     }
     target++;
     const int32_t lag = (int32_t)(displayFrameCounter() - target);
+#if GALAGINO_FRAME_STATS
+    const uint64_t w0 = Frens::time_us();
+#endif
     if (lag < 0)
     {
         while ((int32_t)(displayFrameCounter() - target) < 0)
@@ -975,7 +1160,16 @@ static void paceFrame(bool init)
     else if (lag > 0)
     {
         target = displayFrameCounter();
+#if GALAGINO_FRAME_STATS
+        stats.late++;
+#endif
     }
+#if GALAGINO_FRAME_STATS
+    const uint32_t idle = (uint32_t)(Frens::time_us() - w0);
+    stats.idle_sum += idle;
+    if (idle < stats.idle_min)
+        stats.idle_min = idle;
+#endif
 }
 
 // ---------------------------------------------------------------------------
@@ -1032,6 +1226,7 @@ static void processPerFrame()
     {
         showSettings = false;
         resetInputs();
+        hiscoreFlush(); // the settings menu can restart the board
         g_settings_visibility =
             (state == State::Game) ? g_settings_visibility_galagino_game : g_settings_visibility_galagino_menu;
         setTallCanvas(false); // the settings menu draws on the 320x240 canvas
@@ -1057,7 +1252,10 @@ static void processPerFrame()
             if (rval == 3) // Quit game: back to the game menu
                 enterMenu();
             else if (rval == 5) // Reset Game
+            {
                 gal_reset();
+                hiscoreLoad();
+            }
         }
         else if (state == State::Failed)
         {
@@ -1069,7 +1267,27 @@ static void processPerFrame()
         return;
     }
 
-    const uint16_t in = mapInputs(buttons, pad2);
+    uint16_t in = mapInputs(buttons, pad2);
+#ifdef GALAGINO_AUTOSTART
+    {
+        // profiling builds: a coin after 15 s (the longest boot, Xevious's, is
+        // over by then), a start, then fire and steer
+        static uint32_t frame;
+        frame++;
+        if (frame >= 900 && frame < 905)
+            in |= GAL_BTN_COIN;
+        if (frame >= 1000 && frame < 1005)
+            in |= GAL_BTN_START;
+        if (frame >= 1100)
+        {
+            if (frame & 8)
+                in |= GAL_BTN_FIRE;
+            in |= ((frame / 64) & 1) ? GAL_BTN_LEFT : GAL_BTN_RIGHT;
+            if ((frame / 128) & 1)
+                in |= GAL_BTN_UP;
+        }
+    }
+#endif
     switch (state)
     {
     case State::Game:
@@ -1082,6 +1300,8 @@ static void processPerFrame()
         (void)t0;
 #endif
         audioPending = true;
+        if (gal_hiscore_poll(hiscoreBuf))
+            hiscoreSave();
         break;
     }
     case State::Menu:
@@ -1128,31 +1348,31 @@ int main()
     printf("HW_CONFIG=%d  HSTX=%d  CPU freq: %lu kHz\n", HW_CONFIG, HSTX, (unsigned long)(clock_get_hz(clk_sys) / 1000));
     printf("==========================================================================================\n");
 
+#if GALAGINO_FRAME_STATS
+    statsStartCounter();
+#endif
     FrensSettings::initSettings(FrensSettings::ARCADE);
     gal_init(HSTX ? GAL_FMT_RGB555 : GAL_FMT_RGB444, SAMPLERATE);
 
     // No ROM is ever selected through the browser; the sets are read below.
-    // Without PSRAM they are copied to flash first, inside initAll().
+    // A large game waiting to be copied into flash is copied inside initAll(),
+    // before the display starts (see "The flash cache").
     char dummyRom[FF_MAX_LFN];
     dummyRom[0] = 0;
-    Frens::setPreVideoInitTask(copyRomsToFlash);
+    Frens::setPreVideoInitTask(prepareFlash);
     sdOk = Frens::initAll(dummyRom, CPUFreqKHz, 0, 0, AUDIOBUFFERSIZE, false, true);
     Frens::setPreVideoInitTask(nullptr);
+    takePendingCopy(); // without a card it was not taken: forget it
 
     if (sdOk)
     {
         // loadsettings() inside initAll resets every setting when
         // settings.currentDir does not exist. There is no ROM browser to
         // create it, so make it (FR_EXIST later on is fine) and load again.
-        // The game folders are made too, so the user sees where the sets go.
+        // The game folders are not made: with this many games they would only
+        // litter the card. The README and updateAll name them.
         f_mkdir("/roms");
         f_mkdir(ROMROOT);
-        char dir[48];
-        for (int g = 0; g < GAL_GAME_COUNT; g++)
-        {
-            gameDir(g, dir, sizeof(dir));
-            f_mkdir(dir);
-        }
         FrensSettings::loadsettings();
     }
     // All arcade games share /settings_ARC.dat and with it currentDir. Keep it
@@ -1174,19 +1394,28 @@ int main()
         wiipad_begin();
 #endif
 
-    // 1942 does not fit in SRAM; it runs from a block of PSRAM, on the boards
-    // that have it, and from the flash store on the others.
-    if (Frens::isPsramEnabled())
+    // The large games (1942) do not fit in SRAM; they run from a block of
+    // PSRAM on the boards that have it, and from the flash cache on the others.
+    if (Frens::isPsramEnabled() && !GALAGINO_FLASH_CACHE_TEST)
         gal_set_psram(Frens::f_malloc(GAL_PSRAM_SIZE), GAL_PSRAM_SIZE);
-    if (!flashSynced)
-    {
-        // no SD card: the games already in flash can still be played
-        gal_flash_t fl;
-        if (flashStore(&fl))
-            flashGames = gal_flash_sync(&fl, nullptr, ROMROOT);
-    }
+    openFlashCache(); // without a card initAll() did not; the games in it still play
     installed = probeGames();
-    if (installed)
+    if (copiedGame >= 0)
+    {
+        // just copied into flash: started straight away, as it was chosen
+        if (gal_flash_holds((gal_game_id_t)copiedGame))
+            startGame(copiedGame);
+        else
+        {
+            drawFailedScreen(copiedGame, copyFound);
+            state = State::Failed;
+        }
+    }
+#ifdef GALAGINO_AUTOSTART // profiling builds: the game at once (see CMakeLists.txt)
+    else if (installed)
+        startGame(GALAGINO_AUTOSTART);
+#endif
+    else if (installed)
         enterMenu();
     else
     {

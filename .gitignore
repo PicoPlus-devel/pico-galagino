@@ -54,6 +54,7 @@ sb-*
 # Host harness (hosttest/) binaries and outputs
 hosttest/gal_host
 hosttest/zex_host
+hosttest/flash_test
 hosttest/conv_check
 hosttest/out*/
 hosttest/**/*.ppm

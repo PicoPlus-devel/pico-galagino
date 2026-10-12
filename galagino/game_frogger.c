@@ -370,6 +370,13 @@ static void GAL_HOT(fr_sound)(int16_t *out, int n)
     gal_ay_render(1, SOUND_CLOCK, AY_VOL, out, n);
 }
 
+
+/* High scores: MAME's hiscore.dat, as GalaginoPlus uses it. */
+static const gal_hiscore_region_t fr_hiscore[] = {
+    {0x83f1, 0x0a, 0x63, 0x01},
+    {0x83ef, 0x02, 0x63, 0x04},
+};
+
 const gal_game_ops_t gal_frogger_ops = {
     .init = fr_init,
     .reset = fr_reset,
@@ -379,6 +386,8 @@ const gal_game_ops_t gal_frogger_ops = {
     .sound = fr_sound,
     .view_top = 16,
     .view_h = 256,
+    .hiscore = fr_hiscore,
+    .nhiscore = sizeof(fr_hiscore) / sizeof(fr_hiscore[0]),
 };
 
 #ifdef GAL_CONV_CHECK

@@ -195,4 +195,16 @@
 
 #define _1942_DIP_B  (_1942_DIP_RUN | _1942_DIP_MEDIUM | _1942_DIP_NO_TURN | _1942_DIP_NO_TEST | _1942_DIP_1C1C)
 
+
+// The games of GalaginoPlus: the defaults of MAME's DIP switches (DSW1).
+// Coinage 1 coin 1 credit, 3 lives, upright cabinet, default bonus.
+#define CRUSH_DIP   0x31 // 1C1C, 3 lives, first pattern easy, teleport holes off
+#define EYES_DIP    0xfb // 1C1C, 3 lives, bonus at 50000, upright
+#define MRTNT_DIP   0xfb // 1C1C, 3 lives, bonus at 75000, upright
+#define LIZWIZ_DIP  0xfb // 1C1C, 3 lives, bonus at 75000, normal difficulty
+#define THEGLOB_DIP 0xdf // 3 lives, easiest, demo sounds on
+#define ALIBABA_DIP 0xc9 // 1C1C, 3 lives, bonus at 10000, normal difficulty
+#define PENGO_DSW1  0xb0 // bonus at 30000, demo sounds on, upright, 3 lives, medium
+#define PENGO_DSW2  0xcc // 1C1C on both coin slots
+
 #endif // _DIP_SWITCHES_H_

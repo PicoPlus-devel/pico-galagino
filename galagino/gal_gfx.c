@@ -135,7 +135,8 @@ void gal_conv_sprites_namco(const uint8_t *rom, int count, int pacman_fmt, uint3
             }
             dst[y] = val;
         }
-        gal_sprite_xflip(dst, out_xflip + 16 * spr);
+        if (out_xflip)
+            gal_sprite_xflip(dst, out_xflip + 16 * spr);
     }
 }
 
@@ -172,4 +173,71 @@ void gal_conv_waves(const uint8_t *prom, int count, int8_t *out)
 {
     for (int i = 0; i < count * 32; i++)
         out[i] = (int8_t)((prom[i] & 0x0f) - 7);
+}
+
+/* --- MAME gfx layouts ---------------------------------------------------------
+ * The games after the first six are decoded straight from their MAME
+ * gfx_layout, turned into the upright picture: the element's pixel (ux, uy) of
+ * the upright picture is MAME's pixel
+ *   ROT90:  (uy, s - 1 - ux)
+ *   ROT270: (s - 1 - uy, ux)
+ * of an s x s element. */
+
+int gal_layout_pixel(const uint8_t *rom, const gal_layout_t *l, int n, int x, int y)
+{
+    const uint32_t base = (uint32_t)n * l->charincrement + l->yoffset[y] + l->xoffset[x];
+    int v = 0;
+    for (int p = 0; p < l->planes; p++)
+    {
+        const uint32_t bit = base + l->planeoffset[p];
+        v = (v << 1) | ((rom[bit >> 3] >> (7 - (bit & 7))) & 1);
+    }
+    return v;
+}
+
+static inline int rot_pixel(const uint8_t *rom, const gal_layout_t *l, int n, int rot, int ux, int uy)
+{
+    const int s = l->w;
+    return (rot == GAL_ROT90) ? gal_layout_pixel(rom, l, n, uy, s - 1 - ux)
+                              : gal_layout_pixel(rom, l, n, s - 1 - uy, ux);
+}
+
+void gal_conv_tiles8(const uint8_t *rom, const gal_layout_t *l, int count, int rot, uint16_t *out)
+{
+    for (int n = 0; n < count; n++)
+        for (int uy = 0; uy < 8; uy++)
+        {
+            uint16_t row = 0;
+            for (int ux = 0; ux < 8; ux++)
+                row |= (uint16_t)(rot_pixel(rom, l, n, rot, ux, uy) << (2 * ux));
+            *out++ = row;
+        }
+}
+
+void gal_conv_sprites16(const uint8_t *rom, const gal_layout_t *l, int count, int rot, uint32_t *out)
+{
+    for (int n = 0; n < count; n++)
+        for (int uy = 0; uy < 16; uy++)
+        {
+            uint32_t row = 0;
+            for (int ux = 0; ux < 16; ux++)
+                row |= (uint32_t)rot_pixel(rom, l, n, rot, ux, uy) << (2 * ux);
+            *out++ = row;
+        }
+}
+
+/* Elements of up to four bits per pixel, upright: per row size / 8 words of
+ * eight pixels, the leftmost in the low nibble. */
+void gal_conv_4bpp(const uint8_t *rom, const gal_layout_t *l, int first, int count, int rot, uint32_t *out)
+{
+    const int s = l->w;
+    for (int n = first; n < first + count; n++)
+        for (int uy = 0; uy < s; uy++)
+            for (int w = 0; w < s / 8; w++)
+            {
+                uint32_t word = 0;
+                for (int k = 0; k < 8; k++)
+                    word |= (uint32_t)rot_pixel(rom, l, n, rot, 8 * w + k, uy) << (4 * k);
+                *out++ = word;
+            }
 }

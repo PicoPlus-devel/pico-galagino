@@ -4,7 +4,8 @@
  * in colour and the others grey. Up to three games stand still; with more the
  * column scrolls so that the selection sits in the middle.
  *
- * Only the installed games are listed that can run on the board. Up/down selects, fire or start launches.
+ * Only the installed games are listed that can run on the board. Up/down
+ * selects, left/right moves a page (three logos), fire or start launches.
  * After 20 seconds without input a random game starts (Galagino's "master
  * attract" mode); any input switches that off for good.
  *
@@ -19,13 +20,72 @@
 #include "data/frogger_logo.h"
 #include "data/galaga_logo.h"
 #include "data/pacman_logo.h"
+#include "data/alibaba_logo.h"
+#include "data/crush_logo.h"
+#include "data/eyes_logo.h"
+#include "data/lizwiz_logo.h"
+#include "data/mrtnt_logo.h"
+#include "data/mspacman_logo.h"
+#include "data/theglob_logo.h"
+#include "data/pengo_logo.h"
+#include "data/amidar_logo.h"
+#include "data/anteater_logo.h"
+#include "data/galaxian_logo.h"
+#include "data/mooncresta_logo.h"
+#include "data/scramble_logo.h"
+#include "data/supercobra_logo.h"
+#include "data/turtles_logo.h"
+#include "data/vanvan_logo.h"
+#include "data/ladybug_logo.h"
+#include "data/mrdo_logo.h"
+#include "data/phoenix_logo.h"
+#include "data/spaceinvaders_logo.h"
+#include "data/bombjack_logo.h"
+#include "data/bagman_logo.h"
+#include "data/pbaction_logo.h"
+#include "data/starforce_logo.h"
+#include "data/dkongjr_logo.h"
+#include "data/btime_logo.h"
+#include "data/bnj_logo.h"
+#include "data/vanguard_logo.h"
+#include "data/fantasy_logo.h"
+#include "data/nibbler_logo.h"
+#include "data/dkong3_logo.h"
+#include "data/timeplt_logo.h"
+#include "data/pooyan_logo.h"
+#include "data/tutankhm_logo.h"
+#include "data/rocnrope_logo.h"
+#include "data/circusc_logo.h"
+#include "data/mappy_logo.h"
+#include "data/todruaga_logo.h"
+#include "data/gaplus_logo.h"
+#include "data/gyruss_logo.h"
+#include "data/xevious_logo.h"
 
 #define LOGO_H 96
 #define ATTRACT_FRAMES (20 * 60)
 
 static const unsigned short *const logos[GAL_GAME_COUNT] = {
-    [GAL_GAME_PACMAN] = pacman_logo, [GAL_GAME_GALAGA] = galaga_logo, [GAL_GAME_DKONG] = dkong_logo,
-    [GAL_GAME_FROGGER] = frogger_logo, [GAL_GAME_DIGDUG] = digdug_logo, [GAL_GAME_1942] = _1942_logo,
+    [GAL_GAME_PACMAN] = pacman_logo,     [GAL_GAME_GALAGA] = galaga_logo,     [GAL_GAME_DKONG] = dkong_logo,
+    [GAL_GAME_FROGGER] = frogger_logo,   [GAL_GAME_DIGDUG] = digdug_logo,     [GAL_GAME_1942] = _1942_logo,
+    [GAL_GAME_ALIBABA] = alibaba_logo,   [GAL_GAME_CRUSH] = crush_logo,       [GAL_GAME_EYES] = eyes_logo,
+    [GAL_GAME_LIZWIZ] = lizwiz_logo,     [GAL_GAME_MRTNT] = mrtnt_logo,       [GAL_GAME_MSPACMAN] = mspacman_logo,
+    [GAL_GAME_THEGLOB] = theglob_logo,   [GAL_GAME_PENGO] = pengo_logo,       [GAL_GAME_AMIDAR] = amidar_logo,
+    [GAL_GAME_ANTEATER] = anteater_logo, [GAL_GAME_GALAXIAN] = galaxian_logo, [GAL_GAME_MOONCRST] = mooncresta_logo,
+    [GAL_GAME_SCRAMBLE] = scramble_logo, [GAL_GAME_SCOBRA] = supercobra_logo, [GAL_GAME_TURTLES] = turtles_logo,
+    [GAL_GAME_VANVAN] = vanvan_logo,     [GAL_GAME_LADYBUG] = ladybug_logo,   [GAL_GAME_MRDO] = mrdo_logo,
+    [GAL_GAME_PHOENIX] = phoenix_logo,   [GAL_GAME_INVADERS] = spaceinvaders_logo,
+    [GAL_GAME_BOMBJACK] = bombjack_logo,   [GAL_GAME_BAGMAN] = bagman_logo,
+    [GAL_GAME_PBACTION] = pbaction_logo,   [GAL_GAME_STARFORC] = starforce_logo,
+    [GAL_GAME_DKONGJR] = dkongjr_logo,     [GAL_GAME_BTIME] = btime_logo,
+    [GAL_GAME_BNJ] = bnj_logo,             [GAL_GAME_VANGUARD] = vanguard_logo,
+    [GAL_GAME_FANTASY] = fantasy_logo,     [GAL_GAME_NIBBLER] = nibbler_logo,
+    [GAL_GAME_DKONG3] = dkong3_logo,       [GAL_GAME_TIMEPLT] = timeplt_logo,
+    [GAL_GAME_POOYAN] = pooyan_logo,       [GAL_GAME_TUTANKHM] = tutankhm_logo,
+    [GAL_GAME_ROCNROPE] = rocnrope_logo,   [GAL_GAME_CIRCUSC] = circusc_logo,
+    [GAL_GAME_MAPPY] = mappy_logo,         [GAL_GAME_TODRUAGA] = todruaga_logo,
+    [GAL_GAME_GAPLUS] = gaplus_logo,       [GAL_GAME_GYRUSS] = gyruss_logo,
+    [GAL_GAME_XEVIOUS] = xevious_logo,
 };
 
 static struct
@@ -47,13 +107,13 @@ static int target_offset(void)
     return (LOGO_H * (menu.sel - 1 + menu.n)) % (menu.n * LOGO_H);
 }
 
-void gal_menu_init(uint32_t installed)
+void gal_menu_init(gal_games_t installed)
 {
     menu.n = 0;
     menu.sel = 0;
     for (int g = 0; g < GAL_GAME_COUNT; g++)
     {
-        if ((installed & (1u << g)) && gal_available((gal_game_id_t)g))
+        if ((installed & GAL_GAME_BIT(g)) && gal_available((gal_game_id_t)g) && logos[g])
         {
             if (g == GAL_GAME_GALAGA)
                 menu.sel = menu.n; /* Galaga is the default, as in Galagino */
@@ -94,7 +154,14 @@ int gal_menu_frame(uint16_t buttons)
             sel = menu.n - 1;
     }
     else
+    {
+        /* a page: no further than the first or last game */
+        if (pressed & GAL_BTN_LEFT)
+            sel = (sel == 0) ? menu.n - 1 : (sel < 3 ? 0 : sel - 3);
+        if (pressed & GAL_BTN_RIGHT)
+            sel = (sel == menu.n - 1) ? 0 : (sel + 3 >= menu.n ? menu.n - 1 : sel + 3);
         sel = (sel + menu.n) % menu.n;
+    }
     if (sel != menu.sel)
     {
         menu.sel = sel;
@@ -108,8 +175,12 @@ int gal_menu_frame(uint16_t buttons)
         const int target = target_offset();
         if (menu.offset != target)
         {
-            int diff = ((target - menu.offset) % len + len) % len;
-            menu.offset = (diff < len / 2) ? (menu.offset + 8) % len : (menu.offset - 8 + len) % len;
+            /* a page further away (left/right) scrolls three times as fast */
+            const int diff = ((target - menu.offset) % len + len) % len;
+            const int fwd = diff < len / 2, dist = fwd ? diff : len - diff;
+            const int step = dist > LOGO_H ? 24 : 8;
+            const int move = dist < step ? dist : step;
+            menu.offset = fwd ? (menu.offset + move) % len : (menu.offset - move + len) % len;
             menu.dirty = 1;
         }
     }

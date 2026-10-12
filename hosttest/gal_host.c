@@ -17,11 +17,16 @@
  *   --start F      press 1P start at frame F (held for 4 frames)
  *   --play F       from frame F: fire every 16 frames, steer around
  *   --keys F:MASK  hold buttons MASK (GAL_BTN_*, hex) from frame F for 4 frames
- *   --no-psram     run as a board without PSRAM (1942 is then not available)
- *   --flash FILE   use a flash store, kept in FILE between runs: the complete
- *                  sets are copied into it once, and games start from it. The
- *                  simulated flash checks alignment and only clears bits when
- *                  programmed, as NOR flash does.
+ *   --no-psram     run as a board without PSRAM (the large games, 1942, then
+ *                  need --flash)
+ *   --flash FILE   a flash cache, kept in FILE between runs: a large game not
+ *                  in it is copied into it first, as the board does after its
+ *                  restart, and starts from it. The simulated flash checks
+ *                  alignment and only clears bits when programmed, as NOR
+ *                  flash does.
+ *   --flash-kb N   the size of that flash (default 2048)
+ *   --hiscore DIR  high scores: read DIR/<FOLDER>.HI at the start, written
+ *                  when the game reports a change and at the end
  *
  * Every dumped frame is outdir/frame_NNNNN.ppm (320x240, the canvas the board
  * shows; with --tall the 640x480 the HSTX driver sends). A summary line per
@@ -101,7 +106,7 @@ static const gal_io_t io = {NULL, host_list_dir, host_open, host_size, host_read
 
 /* --- a simulated flash for the store ---------------------------------------- */
 
-#define FLASH_SIZE (2 * 1024 * 1024)
+static uint32_t FLASH_SIZE = 2 * 1024 * 1024;
 static uint8_t *flash_mem;
 static uint32_t flash_erased, flash_programmed;
 static int flash_errors;
@@ -131,7 +136,36 @@ static void sim_program(uint32_t ofs, const uint8_t *data, uint32_t len)
 
 static void sim_copying(int game)
 {
-    printf("flash store: copying %s\n", gal_games[game].title);
+    printf("flash cache: copying %s\n", gal_games[game].title);
+}
+
+static void save_flash(const char *path)
+{
+    FILE *f = fopen(path, "wb");
+    if (f)
+    {
+        fwrite(flash_mem, 1, FLASH_SIZE, f);
+        fclose(f);
+    }
+}
+
+/* --- high scores ------------------------------------------------------------ */
+
+static void hiscore_path(char *out, size_t n, const char *dir, int game)
+{
+    snprintf(out, n, "%s/%s.HI", dir, gal_games[game].folder);
+}
+
+static void hiscore_save(const char *dir, int game, const uint8_t *data)
+{
+    char path[1024];
+    hiscore_path(path, sizeof(path), dir, game);
+    FILE *f = fopen(path, "wb");
+    if (!f)
+        return;
+    fwrite(data, 1, gal_hiscore_size(), f);
+    fclose(f);
+    printf("high scores: wrote %s (%d bytes)\n", path, gal_hiscore_size());
 }
 
 /* --- output helpers ------------------------------------------------------ */
@@ -246,7 +280,7 @@ int main(int argc, char **argv)
     const int every = atoi(argv[4]);
     const char *outdir = "hosttest/out";
     int tate = 0, tall = 0, coin_at = -1, start_at = -1, play_at = -1, no_psram = 0;
-    const char *flash_path = NULL;
+    const char *flash_path = NULL, *hiscore_dir = NULL;
     int key_at[MAX_KEYS], key_mask[MAX_KEYS], nkeys = 0;
     const char *wav_path = NULL;
     int a = 5;
@@ -270,6 +304,10 @@ int main(int argc, char **argv)
             no_psram = 1;
         else if (!strcmp(argv[a], "--flash") && a + 1 < argc)
             flash_path = argv[++a];
+        else if (!strcmp(argv[a], "--flash-kb") && a + 1 < argc)
+            FLASH_SIZE = (uint32_t)atoi(argv[++a]) * 1024;
+        else if (!strcmp(argv[a], "--hiscore") && a + 1 < argc)
+            hiscore_dir = argv[++a];
         else if (!strcmp(argv[a], "--keys") && a + 1 < argc && nkeys < MAX_KEYS)
         {
             if (sscanf(argv[++a], "%d:%x", &key_at[nkeys], &key_mask[nkeys]) == 2)
@@ -305,21 +343,12 @@ int main(int argc, char **argv)
             fclose(f);
         }
         const gal_flash_t fl = {flash_mem, 0, FLASH_SIZE, sim_erase, sim_program, sim_copying};
-        double t0 = now_s();
-        const uint32_t held = gal_flash_sync(&fl, &io, romroot);
-        printf("flash store: holds mask %02x, %u KB erased, %u KB programmed, %d errors, %.0f ms (needs %u KB)\n",
-               held, flash_erased / 1024, flash_programmed / 1024, flash_errors, (now_s() - t0) * 1000,
-               gal_flash_size_needed() / 1024);
-        f = fopen(flash_path, "wb");
-        if (f)
-        {
-            fwrite(flash_mem, 1, FLASH_SIZE, f);
-            fclose(f);
-        }
+        gal_flash_open(&fl);
+        printf("flash cache: %u KB, holds %llx\n", FLASH_SIZE / 1024, (unsigned long long)gal_flash_games());
     }
 
     char dir[1024];
-    uint32_t installed = 0;
+    gal_games_t installed = 0;
     for (int g = 0; g < GAL_GAME_COUNT; g++)
     {
         snprintf(dir, sizeof(dir), "%s/%s", romroot, gal_games[g].folder);
@@ -327,13 +356,14 @@ int main(int argc, char **argv)
         int n = 0;
         for (int i = 0; i < gal_games[g].nfiles; i++)
             n += (found >> i) & 1;
-        printf("%-12s %2d of %2d files%s%s\n", gal_games[g].title, n, gal_games[g].nfiles,
+        printf("%-16s %2d of %2d files%s%s\n", gal_games[g].title, n, gal_games[g].nfiles,
                gal_set_complete((gal_game_id_t)g, found) ? ", complete" : "",
                !gal_supported((gal_game_id_t)g)   ? " (not supported yet)"
-               : !gal_available((gal_game_id_t)g) ? " (needs PSRAM)"
+               : !gal_available((gal_game_id_t)g) ? " (needs PSRAM or flash)"
+               : gal_needs_copy((gal_game_id_t)g) ? " (to be copied to flash)"
                                                   : "");
         if (gal_set_complete((gal_game_id_t)g, found))
-            installed |= 1u << g;
+            installed |= GAL_GAME_BIT(g);
     }
 
     if (menu_mode)
@@ -341,6 +371,18 @@ int main(int argc, char **argv)
     else
     {
         snprintf(dir, sizeof(dir), "%s/%s", romroot, gal_games[game].folder);
+        if (gal_needs_copy((gal_game_id_t)game) && gal_flash_room((gal_game_id_t)game))
+        {
+            /* the board restarts and copies the set before its display starts */
+            double t0 = now_s();
+            flash_erased = flash_programmed = 0;
+            gal_flash_copy((gal_game_id_t)game, &io, dir);
+            printf("flash cache: %s, %u KB erased, %u KB programmed, %d errors, %.0f ms, holds %llx\n",
+                   gal_flash_holds((gal_game_id_t)game) ? "copied" : "COPY FAILED", flash_erased / 1024,
+                   flash_programmed / 1024, flash_errors, (now_s() - t0) * 1000,
+                   (unsigned long long)gal_flash_games());
+            save_flash(flash_path);
+        }
         double t0 = now_s();
         uint32_t found = gal_start((gal_game_id_t)game, &io, dir);
         printf("%s: start %s in %.1f ms, arena %u of %u bytes, PSRAM %u of %u bytes\n", gal_games[game].title,
@@ -352,6 +394,22 @@ int main(int argc, char **argv)
                 if (!(found & (1u << i)))
                     printf("  missing: %s (crc %08x)\n", gal_games[game].files[i].name, gal_games[game].files[i].crc);
             return 2;
+        }
+        if (hiscore_dir && gal_hiscore_size())
+        {
+            char path[1024];
+            uint8_t saved[GAL_HISCORE_MAX];
+            hiscore_path(path, sizeof(path), hiscore_dir, game);
+            FILE *f = fopen(path, "rb");
+            if (f)
+            {
+                if ((int)fread(saved, 1, sizeof(saved), f) == gal_hiscore_size())
+                {
+                    gal_hiscore_load(saved);
+                    printf("high scores: read %s\n", path);
+                }
+                fclose(f);
+            }
         }
     }
 
@@ -402,7 +460,12 @@ int main(int argc, char **argv)
             memset(audio, 0, sizeof(audio));
         }
         else
+        {
             gal_run_frame(in, audio, SAMPLES_PER_FRAME);
+            uint8_t table[GAL_HISCORE_MAX];
+            if (hiscore_dir && gal_hiscore_poll(table))
+                hiscore_save(hiscore_dir, game, table);
+        }
         double t1 = now_s();
         if (menu_mode)
             gal_menu_render(orient, fb, stride, f == 0);
@@ -451,5 +514,8 @@ int main(int argc, char **argv)
         wav_header(wav, total_samples);
         fclose(wav);
     }
+    uint8_t table[GAL_HISCORE_MAX];
+    if (!menu_mode && hiscore_dir && gal_hiscore_flush(table))
+        hiscore_save(hiscore_dir, game, table);
     return 0;
 }

@@ -7,6 +7,7 @@
 #include "romload.h"
 #include "tileaddr.h"
 
+uint8_t gal_zeros[256], gal_ignored[256];
 gal_t gal = {.game = -1};
 
 static const gal_game_ops_t *const game_ops[GAL_GAME_COUNT] = {
@@ -16,6 +17,47 @@ static const gal_game_ops_t *const game_ops[GAL_GAME_COUNT] = {
     [GAL_GAME_FROGGER] = &gal_frogger_ops,
     [GAL_GAME_DIGDUG] = &gal_digdug_ops,
     [GAL_GAME_1942] = &gal_1942_ops,
+    [GAL_GAME_MSPACMAN] = &gal_mspacman_ops,
+    [GAL_GAME_CRUSH] = &gal_crush_ops,
+    [GAL_GAME_EYES] = &gal_eyes_ops,
+    [GAL_GAME_MRTNT] = &gal_mrtnt_ops,
+    [GAL_GAME_LIZWIZ] = &gal_lizwiz_ops,
+    [GAL_GAME_THEGLOB] = &gal_theglob_ops,
+    [GAL_GAME_ALIBABA] = &gal_alibaba_ops,
+    [GAL_GAME_PENGO] = &gal_pengo_ops,
+    [GAL_GAME_GALAXIAN] = &gal_galaxian_ops,
+    [GAL_GAME_MOONCRST] = &gal_mooncrst_ops,
+    [GAL_GAME_SCRAMBLE] = &gal_scramble_ops,
+    [GAL_GAME_SCOBRA] = &gal_scobra_ops,
+    [GAL_GAME_ANTEATER] = &gal_anteater_ops,
+    [GAL_GAME_TURTLES] = &gal_turtles_ops,
+    [GAL_GAME_AMIDAR] = &gal_amidar_ops,
+    [GAL_GAME_VANVAN] = &gal_vanvan_ops,
+    [GAL_GAME_LADYBUG] = &gal_ladybug_ops,
+    [GAL_GAME_MRDO] = &gal_mrdo_ops,
+    [GAL_GAME_PHOENIX] = &gal_phoenix_ops,
+    [GAL_GAME_INVADERS] = &gal_invaders_ops,
+    [GAL_GAME_BOMBJACK] = &gal_bombjack_ops,
+    [GAL_GAME_BAGMAN] = &gal_bagman_ops,
+    [GAL_GAME_PBACTION] = &gal_pbaction_ops,
+    [GAL_GAME_STARFORC] = &gal_starforc_ops,
+    [GAL_GAME_DKONGJR] = &gal_dkongjr_ops,
+    [GAL_GAME_BTIME] = &gal_btime_ops,
+    [GAL_GAME_BNJ] = &gal_bnj_ops,
+    [GAL_GAME_VANGUARD] = &gal_vanguard_ops,
+    [GAL_GAME_FANTASY] = &gal_fantasy_ops,
+    [GAL_GAME_NIBBLER] = &gal_nibbler_ops,
+    [GAL_GAME_DKONG3] = &gal_dkong3_ops,
+    [GAL_GAME_TIMEPLT] = &gal_timeplt_ops,
+    [GAL_GAME_POOYAN] = &gal_pooyan_ops,
+    [GAL_GAME_TUTANKHM] = &gal_tutankhm_ops,
+    [GAL_GAME_ROCNROPE] = &gal_rocnrope_ops,
+    [GAL_GAME_CIRCUSC] = &gal_circusc_ops,
+    [GAL_GAME_MAPPY] = &gal_mappy_ops,
+    [GAL_GAME_TODRUAGA] = &gal_todruaga_ops,
+    [GAL_GAME_GAPLUS] = &gal_gaplus_ops,
+    [GAL_GAME_GYRUSS] = &gal_gyruss_ops,
+    [GAL_GAME_XEVIOUS] = &gal_xevious_ops,
 };
 
 /* ---------------------------------------------------------------------------
@@ -78,6 +120,7 @@ void gal_temp_release(void)
 
 void gal_arena_reset(void)
 {
+    data = &sram;
     sram.lo = psram.lo = 0;
     sram.hi = sram.size;
     psram.hi = psram.size;
@@ -144,9 +187,14 @@ int gal_supported(gal_game_id_t game)
     return game >= 0 && game < GAL_GAME_COUNT && game_ops[game] != NULL;
 }
 
-int gal_needs_psram(gal_game_id_t game)
+int gal_has_extra_button(gal_game_id_t game)
 {
-    return gal_supported(game) && game_ops[game]->needs_psram;
+    return gal_supported(game) && game_ops[game]->extra_button;
+}
+
+int gal_is_large(gal_game_id_t game)
+{
+    return gal_supported(game) && game_ops[game]->large;
 }
 
 const gal_game_ops_t *gal_ops(int game)
@@ -154,15 +202,14 @@ const gal_game_ops_t *gal_ops(int game)
     return (game >= 0 && game < GAL_GAME_COUNT) ? game_ops[game] : NULL;
 }
 
-static int in_flash_store(int game)
-{
-    const uint8_t *parts[GAL_MAX_PARTS];
-    return gal_flash_parts(game, parts);
-}
-
 int gal_available(gal_game_id_t game)
 {
-    return gal_supported(game) && (!game_ops[game]->needs_psram || psram.size > 0 || in_flash_store(game));
+    return gal_supported(game) && (!game_ops[game]->large || psram.size > 0 || gal_flash_room(game));
+}
+
+int gal_needs_copy(gal_game_id_t game)
+{
+    return gal_is_large(game) && psram.size == 0 && !gal_flash_holds(game);
 }
 
 int gal_set_complete(gal_game_id_t game, uint32_t found)
@@ -173,6 +220,7 @@ int gal_set_complete(gal_game_id_t game, uint32_t found)
 
 void gal_stop(void)
 {
+    gal_hiscore_stop();
     gal.game = -1;
     gal.ops = NULL;
     gal_arena_reset();
@@ -195,32 +243,20 @@ uint32_t gal_start(gal_game_id_t game, const gal_io_t *io, const char *dir)
     uint8_t *regions[GAL_MAX_PARTS] = {0};
     const uint8_t *parts[GAL_MAX_PARTS];
     uint32_t found;
-    if (gal_flash_parts(game, parts))
+    if (ops->large && psram.size == 0)
     {
-        /* From the flash store. The regions a game only converts are read in
-         * place; its program ROMs are copied to SRAM, where the CPUs read them
-         * fast and the game may patch them. A game that needs PSRAM takes
-         * everything in place and copies what it needs itself. */
+        /* From the flash cache, read in place; the game copies what it reads
+         * all the time to SRAM itself (gal_fast_alloc). */
+        if (!gal_flash_parts(game, parts))
+            return 0;
         data = &sram;
-        for (int r = 0; r < g->nregions; r++)
-        {
-            if ((g->temp_mask & (1u << r)) || ops->needs_psram)
-                regions[r] = (uint8_t *)parts[r];
-            else if ((regions[r] = (uint8_t *)gal_alloc(g->region_size[r])) != NULL)
-                memcpy(regions[r], parts[r], g->region_size[r]);
-            else
-            {
-                gal_arena_reset();
-                return 0;
-            }
-        }
-        for (int d = 0; d < ops->nderived; d++)
-            regions[GAL_MAX_REGIONS + d] = (uint8_t *)parts[GAL_MAX_REGIONS + d];
+        for (int p = 0; p < GAL_MAX_PARTS; p++)
+            regions[p] = (uint8_t *)parts[p];
         found = (g->nfiles >= 32) ? 0xffffffffu : ((1u << g->nfiles) - 1);
     }
     else
     {
-        data = ops->needs_psram ? &psram : &sram;
+        data = ops->large ? &psram : &sram;
         for (int r = 0; r < g->nregions; r++)
         {
             regions[r] = (g->temp_mask & (1u << r)) ? (uint8_t *)gal_temp_alloc(g->region_size[r])
@@ -257,14 +293,22 @@ uint32_t gal_start(gal_game_id_t game, const gal_io_t *io, const char *dir)
     gal.ops = ops;
     gal.game = game;
     ops->reset();
+    gal_hiscore_start();
     return found;
 }
 
 void gal_reset(void)
 {
     if (gal.ops)
+    {
         gal.ops->reset();
+        gal_hiscore_start();
+    }
 }
+
+#if GALAGINO_FRAME_STATS
+uint32_t gal_prof[GAL_NPROF];
+#endif
 
 void GAL_HOT(gal_run_frame)(uint16_t buttons, int16_t *audio, int n)
 {
@@ -277,21 +321,28 @@ void GAL_HOT(gal_run_frame)(uint16_t buttons, int16_t *audio, int n)
     int done = 0;
     for (int q = 0; q < 4; q++)
     {
+        GAL_PROF_START(t0);
         gal.ops->run_slice(q);
+        GAL_PROF_ADD(0, t0);
         const int upto = (n * (q + 1)) / 4;
+        GAL_PROF_START(t1);
         gal.ops->sound(audio + done, upto - done);
+        GAL_PROF_ADD(1, t1);
         done = upto;
     }
+    gal_hiscore_frame();
 }
 
 /* ---------------------------------------------------------------------------
  * Video
  *
  * A game uses rows view_top .. view_top + view_h - 1 of the upright 224x288
- * picture (all 288 on the Namco boards, 256 on the Galaxian-class ones).
+ * picture (all 288 on the Namco boards, 256 on the Galaxian-class ones, 240
+ * on Universal's).
  *
  * Upright (Tate off): those rows become 240 by dropping every sixth row (288)
- * or every sixteenth (256); the picture sits at x = 48. Bands are 224x8, top
+ * or every sixteenth (256), or are shown as they are (240: the Universal
+ * boards); the picture sits at x = 48. Bands are 224x8, top
  * to bottom.
  *
  * Upright full (HSTX): the same bands, no row dropped, on a canvas `stride`
@@ -383,6 +434,29 @@ static void GAL_HOT(put_band_tate)(const gal_band_t *b, gal_orient_t orient, uin
     }
 }
 
+/* The band from the game; for a flip180 game the opposite rectangle of the
+ * picture, reversed in place, which is a turn by 180 degrees */
+static void GAL_HOT(render_band)(gal_band_t *b)
+{
+    if (!gal.ops->flip180)
+    {
+        gal.ops->render_band(b);
+        return;
+    }
+    const int top = gal.ops->view_top, h = gal.ops->view_h;
+    gal_band_t m = *b;
+    m.x0 = GAL_W - (b->x0 + b->w);
+    m.y0 = top + (top + h) - (b->y0 + b->h);
+    gal.ops->render_band(&m);
+    uint16_t *p = b->buf, *q = b->buf + b->w * b->h - 1;
+    while (p < q)
+    {
+        const uint16_t t = *p;
+        *p++ = *q;
+        *q-- = t;
+    }
+}
+
 void GAL_HOT(gal_render)(gal_orient_t orient, uint16_t *fb, int stride)
 {
     if (!gal.ops)
@@ -395,14 +469,14 @@ void GAL_HOT(gal_render)(gal_orient_t orient, uint16_t *fb, int stride)
     if (orient == GAL_ORIENT_UPRIGHT || orient == GAL_ORIENT_UPRIGHT_FULL)
     {
         const int full = (orient == GAL_ORIENT_UPRIGHT_FULL);
-        const int every = full ? 0 : (h == GAL_H) ? 6 : 16;
+        const int every = (full || h <= 240) ? 0 : (h == GAL_H) ? 6 : 16;
         const int x0 = full ? (stride - GAL_W) / 2 : UPRIGHT_X0;
         b.x0 = 0;
         b.w = GAL_W;
         b.h = 8;
         for (b.y0 = top; b.y0 < top + h; b.y0 += 8)
         {
-            gal.ops->render_band(&b);
+            render_band(&b);
             put_band_upright(&b, top, every, fb, stride, x0);
         }
     }
@@ -415,7 +489,7 @@ void GAL_HOT(gal_render)(gal_orient_t orient, uint16_t *fb, int stride)
         {
             const int c = (orient == GAL_ORIENT_TATE_CW) ? GAL_W / 8 - 1 - k : k;
             b.x0 = 8 * c;
-            gal.ops->render_band(&b);
+            render_band(&b);
             put_band_tate(&b, orient, fb, stride);
         }
     }

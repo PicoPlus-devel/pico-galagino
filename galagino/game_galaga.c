@@ -508,6 +508,13 @@ static void GAL_HOT(gg_sound)(int16_t *out, int n)
     gal_voice_mix(&gg.boom, out, n);
 }
 
+
+/* High scores: MAME's hiscore.dat, as GalaginoPlus uses it. */
+static const gal_hiscore_region_t gg_hiscore[] = {
+    {0x8a20, 0x2d, 0x00, 0x18}, /* the best five scores and initials */
+    {0x83ed, 6, 0x00, 0x24},    /* video RAM: the high score shown */
+};
+
 const gal_game_ops_t gal_galaga_ops = {
     .init = gg_init,
     .reset = gg_reset,
@@ -517,6 +524,8 @@ const gal_game_ops_t gal_galaga_ops = {
     .sound = gg_sound,
     .view_top = 0,
     .view_h = GAL_H,
+    .hiscore = gg_hiscore,
+    .nhiscore = sizeof(gg_hiscore) / sizeof(gg_hiscore[0]),
 };
 
 #ifdef GAL_CONV_CHECK

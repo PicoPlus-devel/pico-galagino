@@ -116,6 +116,18 @@ Z80_INLINE u8 mem_rd(z80_t *cpu, u16 addr)
     return p ? p[addr & 0xff] : cpu->read(cpu, addr);
 }
 
+/* An opcode fetch: from the decrypted opcodes when the game has any there */
+Z80_INLINE u8 op_rd(z80_t *cpu, u16 addr)
+{
+    if (cpu->op_page)
+    {
+        const u8 *p = cpu->op_page[addr >> 8];
+        if (p)
+            return p[addr & 0xff];
+    }
+    return mem_rd(cpu, addr);
+}
+
 Z80_INLINE void mem_wr(z80_t *cpu, u16 addr, u8 data)
 {
     u8 *p = cpu->wr_page[addr >> 8];
@@ -129,7 +141,7 @@ Z80_INLINE void mem_wr(z80_t *cpu, u16 addr, u8 data)
 #define data_write(addr, value) mem_wr(cpu, (addr), (value))
 #define stack_read(addr) mem_rd(cpu, (addr))
 #define stack_write(addr, value) mem_wr(cpu, (addr), (value))
-#define opcode_read() mem_rd(cpu, PC)
+#define opcode_read() op_rd(cpu, PC)
 #define arg_read() mem_rd(cpu, PC)
 #define io_read(port) cpu->in(cpu, (port))
 #define io_write(port, value) cpu->out(cpu, (port), (value))

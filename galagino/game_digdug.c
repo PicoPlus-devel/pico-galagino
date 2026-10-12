@@ -521,6 +521,12 @@ static void GAL_HOT(dd_sound)(int16_t *out, int n)
     gal_wsg_render(dd.waves, 0x0f, out, n);
 }
 
+
+/* High scores: MAME's hiscore.dat, as GalaginoPlus uses it. */
+static const gal_hiscore_region_t dd_hiscore[] = {
+    {0x89a0, 0x25, 0x01, 0x01},
+};
+
 const gal_game_ops_t gal_digdug_ops = {
     .init = dd_init,
     .reset = dd_reset,
@@ -530,6 +536,8 @@ const gal_game_ops_t gal_digdug_ops = {
     .sound = dd_sound,
     .view_top = 0,
     .view_h = GAL_H,
+    .hiscore = dd_hiscore,
+    .nhiscore = sizeof(dd_hiscore) / sizeof(dd_hiscore[0]),
 };
 
 #ifdef GAL_CONV_CHECK

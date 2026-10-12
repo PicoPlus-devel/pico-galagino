@@ -1,6 +1,6 @@
 # pico-galagino
 
-**pico-galagino** runs six arcade games of the early 1980s on RP2350-based microcontroller boards, with video and audio over DVI/HDMI: **Pac-Man**, **Galaga**, **Donkey Kong**, **Frogger**, **Dig Dug** and **1942**. It is a port of [Galagino](https://github.com/harbaum/galagino) by Till Harbaum, an emulator of these games for the ESP32, with the Z80 CPU core of [MAME](https://www.mamedev.org/). A game is chosen from Galagino's menu of game logos at start-up.
+**pico-galagino** runs arcade games of the early 1980s on RP2350-based microcontroller boards, with video and audio over DVI/HDMI: **Pac-Man**, **Ms. Pac-Man**, **Galaga**, **Donkey Kong**, **Frogger**, **Dig Dug**, **1942**, **Pengo**, **Crush Roller**, **Eyes**, **Mr. TNT**, **Lizard Wizard**, **The Glob**, **Ali Baba and 40 Thieves**, **Galaxian**, **Moon Cresta**, **Scramble**, **Super Cobra**, **Turtles**, **Amidar** and **Anteater**. It is a port of [Galagino](https://github.com/harbaum/galagino) by Till Harbaum, an emulator of arcade games for the ESP32, and of its fork [GalaginoPlus](https://github.com/VirtualClaudioBoy/GalaginoPlus), with the Z80 CPU core of [MAME](https://www.mamedev.org/). A game is chosen from Galagino's menu of game logos at start-up.
 
 It uses the same menu, display, audio and controller framework as this family of emulators:
 
@@ -58,6 +58,12 @@ The games as the emulator draws them, at twice the original size, with *Tate mod
 
 ***
 
+## GalaginoPlus
+
+pico-galagino follows [GalaginoPlus](https://github.com/VirtualClaudioBoy/GalaginoPlus) by VirtualClaudioBoy, a fork of Galagino with 48 games, and is being extended to its games. It already knows the ROM sets of 47 of them, so that pico-bootLoader's updateAll installs them all; a game appears in the menu once it has been ported. Scrambled Egg is left out: its set is not available from the source updateAll downloads from. Phoenix and Moon Cresta use the same folders and sets as [pico-phoenix](https://github.com/PicoPlus-devel/pico-phoenix) and [pico-mooncresta](https://github.com/PicoPlus-devel/pico-mooncresta).
+
+***
+
 ## Game data
 
 Each game needs one MAME ROM set, the same set Galagino is built from. Copy each set to its folder on the SD card:
@@ -70,19 +76,62 @@ Each game needs one MAME ROM set, the same set Galagino is built from. Copy each
 | Frogger | `frogger` | `frogger.zip` | `/roms/arcade/FROGGER` | 9 |
 | Dig Dug | `digdug` (rev 2) | `digdug.zip` | `/roms/arcade/DIGDUG` | 19 |
 | 1942 | `1942` (Revision B) | `1942.zip` | `/roms/arcade/1942` | 25 |
+| Ms. Pac-Man | `mspacman` | `mspacman.zip` | `/roms/arcade/MSPACMAN` | 13 |
+| Pengo | `pengoja` (315-5010 type, rev. C) | `pengo.zip` | `/roms/arcade/PENGO` | 14 |
+| Crush Roller | `crush` (set 1) | `crush.zip` | `/roms/arcade/CRUSHROLLER` | 10 |
+| Eyes | `eyes` (US, set 1) | `eyes.zip` | `/roms/arcade/EYES` | 10 |
+| Mr. TNT | `mrtnt` | `mrtnt.zip` | `/roms/arcade/MRTNT` | 10 |
+| Lizard Wizard | `lizwiz` | `lizwiz.zip` | `/roms/arcade/LIZARDWIZARD` | 12 |
+| The Glob | `theglobp` (Pac-Man hardware), a clone of `suprglob` | `suprglob.zip` (merged) or `theglobp.zip` | `/roms/arcade/THEGLOB` | 8 |
+| Ali Baba and 40 Thieves | `alibaba` | `alibaba.zip` | `/roms/arcade/ALIBABA` | 15 |
+| Galaxian | `galaxian` (Namco set 1) | `galaxian.zip` | `/roms/arcade/GALAXIAN` | 8 |
+| Moon Cresta | `mooncrst` (Nichibutsu) | `mooncrst.zip` | `/roms/arcade/MOONCRESTA` | 13 |
+| Scramble | `scramble` | `scramble.zip` | `/roms/arcade/SCRAMBLE` | 14 |
+| Super Cobra | `scobra` | `scobra.zip` | `/roms/arcade/SUPERCOBRA` | 12 |
+| Turtles | `turtles` | `turtles.zip` | `/roms/arcade/TURTLES` | 10 |
+| Amidar | `amidar1` (older), a clone of `amidar` | `amidar.zip` | `/roms/arcade/AMIDAR` | 9 |
+| Anteater | `anteater` | `anteater.zip` | `/roms/arcade/ANTEATER` | 9 |
+| Van-Van Car | `vanvan` | `vanvan.zip` | `/roms/arcade/VANVANCAR` | 9 |
+| Lady Bug | `ladybug` | `ladybug.zip` | `/roms/arcade/LADYBUG` | 13 |
+| Mr. Do! | `mrdo` | `mrdo.zip` | `/roms/arcade/MRDO` | 13 |
+| Bagman | `bagmanm2` (on Moon Cresta hardware), a clone of `bagman` | `bagman.zip` (merged) or `bagmanm2.zip` | `/roms/arcade/BAGMAN` | 6 |
+| Space Invaders | `invaders` | `invaders.zip` | `/roms/arcade/SPACEINVADERS` | 4 |
+| Phoenix | `phoenix` (Amstar, set 1) | `phoenix.zip` | `/roms/arcade/PHOENIX` | 14 |
+| Bomb Jack | `bombjack` | `bombjack.zip` | `/roms/arcade/BOMBJACK` | 16 |
+| Pinball Action | `pbaction` | `pbaction.zip` | `/roms/arcade/PINBALLACTION` | 14 |
+| Star Force | `starforc` | `starforc.zip` | `/roms/arcade/STARFORCE` | 19 |
+| Donkey Kong Jr. | `dkongjrj` (Japan), a clone of `dkongjr` | `dkongjr.zip` (merged) or `dkongjrj.zip` | `/roms/arcade/DONKEYKONGJR` | 13 |
+| Donkey Kong 3 | `dkong3` | `dkong3.zip` | `/roms/arcade/DONKEYKONG3` | 15 |
+| BurgerTime | `btime` (Data East set 1) | `btime.zip` | `/roms/arcade/BURGERTIME` | 15 |
+| Bump 'n' Jump | `bnjm` (Midway), a clone of `brubber` | `brubber.zip` (merged) | `/roms/arcade/BUMPNJUMP` | 9 |
+| Vanguard | `vanguard` (SNK, set 1) | `vanguard.zip` | `/roms/arcade/VANGUARD` | 14 |
+| Fantasy | `fantasyu` (US) | `fantasyu.zip` | `/roms/arcade/FANTASY` | 16 |
+| Nibbler | `nibbler6` (rev. 6), a clone of `nibbler` | `nibbler.zip` (merged) | `/roms/arcade/NIBBLER` | 16 |
+| Time Pilot | `timeplt` | `timeplt.zip` | `/roms/arcade/TIMEPILOT` | 11 |
+| Pooyan | `pooyan` | `pooyan.zip` | `/roms/arcade/POOYAN` | 13 |
+| Tutankham | `tutankhm` | `tutankhm.zip` | `/roms/arcade/TUTANKHAM` | 17 |
+| Roc'n Rope | `rocnrope` | `rocnrope.zip` | `/roms/arcade/ROCNROPE` | 16 |
+| Circus Charlie | `circusc` | `circusc.zip` | `/roms/arcade/CIRCUSCHARLIE` | 18 |
+| Mappy | `mappy` (US) | `mappy.zip` | `/roms/arcade/MAPPY` | 11 |
+| The Tower of Druaga | `todruaga` (new version) | `todruaga.zip` | `/roms/arcade/TOWEROFDRUAGA` | 10 |
+| Gaplus | `galaga3` (Galaga 3), a clone of `gaplus` | `gaplus.zip` (merged) | `/roms/arcade/GAPLUS` | 19 |
+| Gyruss | `gyruss` (Konami) | `gyruss.zip` | `/roms/arcade/GYRUSS` | 15 |
+| Xevious | `xevious` (Namco) | `xevious.zip` | `/roms/arcade/XEVIOUS` | 26 |
 
 A set can be copied in either form:
 
 - **The zip file as it is.** Merged, split and non-merged sets all work. In a merged `puckman.zip` the Midway Pac-Man files are in the clone subfolders of the archive and its colour and sound PROMs carry the parent's names; they are found all the same. With a split set, copy `pacman.zip` together with `puckman.zip`.
 - **The files, unzipped.** A subfolder named after the set (for example `/roms/arcade/GALAGA/galaga`), which unzipping commonly produces, is searched as well.
 
-Files are recognised by their size and CRC32, so their names and their place in an archive do not matter, and a corrupt or different file is never loaded. The board creates the six folders on first start.
+Files are recognised by their size and CRC32, so their names and their place in an archive do not matter, and a corrupt or different file is never loaded.
 
-The game menu lists the games whose sets are complete. When no set is found, the board shows a screen that names the zip files and their folders. **SELECT + START** opens the settings menu from that screen; its *USB drive mode* shows the SD card on a computer, so the sets can be copied to it without removing the card. After leaving the menu, the board restarts and looks for the sets again.
+**pico-bootLoader's updateAll** downloads the sets and writes them, unzipped, into these folders, together with those of the games that are still to come (see [GalaginoPlus](#galaginoplus)). It runs on a computer with the SD card inserted; see the [pico-bootLoader README](https://github.com/PicoPlus-devel/pico-bootLoader). The board does not create the folders itself.
 
-Like Galagino, the emulator converts the graphics, colour and sound PROMs into its own formats; it does so on the board when a game starts, which takes a fraction of a second. Clones, bootlegs and the other games of the Galagino forks are not supported.
+The game menu lists the games whose sets are complete. When no set is found, the board shows a screen that explains where the sets go. **SELECT + START** opens the settings menu from that screen; its *USB drive mode* shows the SD card on a computer, so the sets can be copied to it without removing the card. After leaving the menu, the board restarts and looks for the sets again.
 
-**Boards without PSRAM copy the sets into their flash.** At start-up, before the picture appears, the board copies every complete set it finds on the card into its flash memory, once: a set already there is not copied again. The first start with new sets therefore takes a few seconds longer, with a dark screen and a blinking LED; later starts only check the copies. The games then start from flash, and those already copied can be played without the SD card. Boards with PSRAM read the sets from the card when a game starts.
+Like Galagino, the emulator converts the graphics, colour and sound PROMs into its own formats; it does so on the board when a game starts, which takes a fraction of a second. Clones and bootlegs other than the sets listed are not supported.
+
+**Large games run from PSRAM, or from flash.** A game is read from the card each time it starts. The data of a large game (1942, Bomb Jack, Pinball Action, Star Force, Donkey Kong 3, BurgerTime, Bump 'n' Jump, Tutankham, Roc'n Rope, Circus Charlie, The Tower of Druaga, Gaplus, Gyruss, Xevious) does not fit in the internal SRAM: on boards with PSRAM it is kept there; boards without PSRAM keep it in their flash memory instead. The board copies such a set into flash the first time the game is started: it shows a notice, restarts, copies the set with a dark screen and a blinking LED, which takes a few seconds, and starts the game. Later starts use the copy, also without the SD card. When the flash is full, the copy made longest ago makes room. The flash used is everything after the program, as large as the flash chip itself reports, not only the size the board type usually carries.
 
 ***
 
@@ -90,7 +139,7 @@ Like Galagino, the emulator converts the graphics, colour and sound PROMs into i
 
 pico-galagino runs on every RP2350 configuration of this family, with both video back-ends. RP2040 boards are not supported.
 
-All six games run on every board. The converted graphics of 1942 take about 230 KB, more than the internal SRAM leaves free: on boards with PSRAM (for example the Adafruit Fruit Jam) they are kept there, and on boards without PSRAM in the flash copy of the sets (see [Game data](#game-data)).
+All the games run on every board. The converted graphics of 1942 take about 230 KB, more than the internal SRAM leaves free: on boards with PSRAM (for example the Adafruit Fruit Jam) they are kept there, and on boards without PSRAM in a copy in flash, made the first time the game is started (see [Game data](#game-data)).
 
 | HW_CONFIG | Hardware | Video | Binary |
 | --- | --- | --- | --- |
@@ -115,32 +164,34 @@ Audio is sent over HDMI. Boards with an I2S DAC (configurations 8, 13 and 14) ca
 
 ## Controls
 
-In the game menu, **up** and **down** select a game and **A** or **START** starts it. When nothing is pressed for 20 seconds, a game is chosen at random, as in Galagino; any button switches this off until the board restarts.
+In the game menu, **up** and **down** select a game, **left** and **right** move three games at a time, and **A** or **START** starts it. When nothing is pressed for 20 seconds, a game is chosen at random, as in Galagino; any button switches this off until the board restarts.
 
 In a game:
 
 | Controller | Function |
 | --- | --- |
 | D-pad | Joystick |
-| A (or X) | Fire (Galaga, Dig Dug: pump, 1942); jump (Donkey Kong) |
-| B (or Y) | The same as A; in 1942 the loop |
+| A (or X) | Fire (Galaga, Dig Dug: pump, 1942, Space Invaders, Phoenix, Star Force, Fantasy, Donkey Kong 3: spray, Time Pilot, Pooyan, Gaplus, Gyruss, Xevious: the zapper); fire in each direction in turn (Vanguard); fire left and right (Tutankham); pepper (BurgerTime); jump (Donkey Kong, Donkey Kong Jr., Bomb Jack, Bump 'n' Jump, Circus Charlie); push ice (Pengo); throw the ball (Mr. Do!); open doors (Mappy); the sword (The Tower of Druaga); the harpoon (Roc'n Rope); the game's button (Eyes, Mr. TNT, Lizard Wizard, Ali Baba, Van-Van Car, Bagman); act (The Glob); right flipper (Pinball Action) |
+| B (or Y) | The same as A; in 1942 the loop; in The Glob the elevator; in Scramble and Super Cobra the bombs; in Phoenix the shield; in Pinball Action the left flipper; in Tutankham the flash bomb; in Roc'n Rope the flash; in Xevious the blaster (bombs) |
 | SELECT | Insert a coin (on release) |
 | START | 1 player start |
 | START on a second USB controller | 2 player start |
 | START + A | Frame rate display on/off |
 | SELECT + START | Settings menu |
 
-Pac-Man and Frogger have no button besides the joystick. Two players take turns on the same controls.
+Pac-Man, Ms. Pac-Man, Crush Roller, Frogger, Lady Bug and Nibbler have no button besides the joystick. In Pinball Action, left and right work the flippers as well, down shoots the ball and up nudges the table. Two players take turns on the same controls.
+
+Bomb Jack checks its ROMs and RAM for about 20 seconds after it starts, Xevious for about 10, as the arcade board does, and takes coins only after that. The sound effects of Vanguard, Fantasy and Nibbler (made by SN76477 chips and discrete circuits) and their speech are not emulated; their music is. Neither are the explosion sounds of Gaplus, which its arcade board plays from a recording, and of Xevious, the starfield of Tutankham and the filters of the Konami sound boards.
 
 USB game controllers, NES and SNES controllers on the GPIO ports and the Wii Classic controller are supported, as in the other emulators of this family. A and B both press the fire button. Each has its own rapid fire setting, so one of them can fire single shots and the other fire automatically. The coin is inserted when SELECT is released, and only when no other button was pressed while it was held, so opening the settings menu does not insert a coin. While START is held, A switches the frame rate display (top left, in the border) on or off instead of firing.
 
-The DIP switches have Galagino's settings: an upright cabinet, 1 coin for 1 credit, three lives (Pac-Man, Galaga, Donkey Kong, Frogger, Dig Dug) or two (1942), and the default bonus lives.
+The DIP switches have Galagino's settings for its six games: an upright cabinet, 1 coin for 1 credit, three lives (Pac-Man, Galaga, Donkey Kong, Frogger, Dig Dug) or two (1942), and the default bonus lives. The other games have MAME's default settings, which are much the same: 1 coin for 1 credit and three lives.
 
 ***
 
 ## Display and tate mode
 
-All six games were made for a monitor mounted on its side. Pac-Man, Galaga and Dig Dug have a picture 224 pixels wide and 288 pixels tall; Donkey Kong, Frogger and 1942 one 224 pixels wide and 256 pixels tall. The *Tate mode* setting chooses how it is shown:
+All the games were made for a monitor mounted on its side. Pac-Man and the other games on its board, Galaga and Dig Dug have a picture 224 pixels wide and 288 pixels tall; Donkey Kong, Frogger, 1942 and the games of the Galaxian board (Galaxian, Moon Cresta, Scramble, Super Cobra, Turtles, Amidar, Anteater) one 224 pixels wide and 256 pixels tall. The *Tate mode* setting chooses how it is shown:
 
 | Tate mode | Picture | For |
 | --- | --- | --- |
@@ -169,7 +220,13 @@ Both pictures appear upright once the monitor is turned as described in the tabl
 
 **SELECT + START** opens the settings menu. Besides *Tate mode*, it offers the screen mode with or without scanlines, the FPS overlay, audio on/off, rapid fire on A and on B, the external audio output, the Fruit Jam volume and VU meter, the controller test, BOOTSEL mode and USB drive mode. In a game it also offers *Reset game*, and *Quit game*, which returns to the game menu. When started from pico-bootLoader, it also offers *Return to emulator selection*.
 
-The settings are stored on the SD card in `/settings_ARC.dat`, a file shared by all arcade games of this family. The games have no save states, and high scores are not kept after a reset or power cycle.
+The settings are stored on the SD card in `/settings_ARC.dat`, a file shared by all arcade games of this family. The games have no save states.
+
+***
+
+## High scores
+
+As in GalaginoPlus, the high score table of each game is kept on the SD card, in `/SAVES/GALAGINO/<folder>.HI` (for example `/SAVES/GALAGINO/GALAGA.HI`), and put back into the game the next time it is played. The tables are those of MAME's `hiscore.dat`. The board checks the table every five seconds and writes the file when it has changed, and again before the game is reset, left or the settings menu is opened. Deleting a file resets that game's table.
 
 ***
 
@@ -186,7 +243,12 @@ cd pico-galagino
 ./bld.sh -h             # all options
 ```
 
-Every configuration must be built with `-2` (RP2350). `EXTRA_CMAKE_ARGS=-DGALAGINO_FRAME_STATS=1 ./bld.sh -c 8 -2` builds a version that prints the time spent emulating and drawing a frame over the serial console every five seconds.
+Every configuration must be built with `-2` (RP2350).
+
+Two build options help to measure the speed of a game on the board:
+
+- `EXTRA_CMAKE_ARGS=-DGALAGINO_FRAME_STATS=1 ./bld.sh -c 8 -2` prints over the serial console, every five seconds, the time spent emulating and drawing a frame, the time left before the display needs the next frame, the number of frames that came too late, and the time of each CPU of the games that count it. The frame rate display on the screen shows the length of a single frame, so it varies by a few frames per second even when no frame is late.
+- `-DGALAGINO_AUTOSTART=GAL_GAME_<NAME>` (with the option above, for example `EXTRA_CMAKE_ARGS="-DGALAGINO_FRAME_STATS=1 -DGALAGINO_AUTOSTART=GAL_GAME_GYRUSS"`) starts that game instead of the menu, inserts a coin, starts it and plays it with fixed inputs, so that it can be measured without anyone at the board. The names are in `galagino/galagino.h`.
 
 The instruction loop of the Z80 core, `galagino/z80_ops.h`, is generated from MAME's opcode list `galagino/z80.lst` and is checked in, so the build does not need Python. After a change to the list, regenerate it with `tools/z80gen.py galagino/z80.lst galagino/z80_ops.h`. The built-in screensaver image (`DefaultSS444.c`, `DefaultSS555.c`) is a picture of the game menu, made by `tools/mkdefaultss.py` from a frame of the host harness.
 
@@ -209,9 +271,11 @@ hosttest/build.sh
 python3 hosttest/ppm2png.py hosttest/out/frame_01200.ppm
 hosttest/conv_check.py ~/roms/arcade path/to/galagino /tmp/conv_check
 ./hosttest/zex_host zexdoc.com zexall.com
+./hosttest/flash_test
 ```
 
-- `gal_host` takes the folder that holds the game folders, as on the SD card, and a game (its folder name) or `menu`. It loads the set through the same loader as the firmware, runs the given number of frames with scripted input, writes every Nth frame as a 320 x 240 PPM in the chosen orientation (`--tate 0|1|2`) and the sound as a WAV file. `--tall` writes instead the 640 x 480 picture that a board with HSTX video output shows with *Tate mode* off. `--no-psram` runs it as a board without PSRAM, and `--flash FILE` with a flash copy of the sets, kept in FILE between runs.
+- `gal_host` takes the folder that holds the game folders, as on the SD card, and a game (its folder name) or `menu`. It loads the set through the same loader as the firmware, runs the given number of frames with scripted input, writes every Nth frame as a 320 x 240 PPM in the chosen orientation (`--tate 0|1|2`) and the sound as a WAV file. `--tall` writes instead the 640 x 480 picture that a board with HSTX video output shows with *Tate mode* off. `--no-psram` runs it as a board without PSRAM, and `--flash FILE` (with `--flash-kb N` for its size) with a flash cache, kept in FILE between runs, which a large game is copied into first, as the board does. `--hiscore DIR` reads and writes the high score files in DIR.
+- `flash_test` checks the flash cache on its own with made-up games: where slots go, which copy makes room, finding them again after a restart, and damaged, half-written and outdated slots.
 - `conv_check.py` runs the converters of a Galagino checkout (`romconv/`) on the same ROM sets and compares every table they write with the one the emulator builds on the board.
 - `zex_host` runs the ZEXDOC and ZEXALL instruction exercisers on the Z80 core; the test programs are not part of this repository.
 
@@ -219,11 +283,16 @@ hosttest/conv_check.py ~/roms/arcade path/to/galagino /tmp/conv_check
 
 ## Credits and licence
 
+- [GalaginoPlus](https://github.com/VirtualClaudioBoy/GalaginoPlus): VirtualClaudioBoy, under the GNU General Public License v3.0. The high score support and its tables, the ROM sets and logos of its games, the recorded Space Invaders shot and hit sounds and Donkey Kong fall sound, and their emulation, with MAME's drivers as the reference for the hardware (memory maps, decryption, colours), are taken or ported from it.
 - [Galagino](https://github.com/harbaum/galagino): Till Harbaum. The emulation of the six games, their ROM converters, the menu and its logos, the Galaga star sets and the recorded explosion, walk, jump and stomp sounds are taken or ported from it. The Intel 8048 core of the Donkey Kong sound CPU is derived by Galagino from [asig/kosmos-cp1](https://github.com/asig/kosmos-cp1). These parts are under the GNU General Public License v3.0.
+- [pico-phoenix](https://github.com/PicoPlus-devel/pico-phoenix) and the MAME project (i8085.cpp, tms36xx.cpp, phoenix.cpp, phoenix_v.cpp, phoenix_a.cpp: Juergen Buchmueller, Roberto Fresca, Grull Osgo, Richard Davies, Derrick Renaud, K. Wilkins), under the BSD-3-Clause licence: the 8085 CPU core, which also runs Space Invaders, and the Phoenix machine, sound and melody chip.
+- The 6502 CPU core of BurgerTime, Bump 'n' Jump, Vanguard, Fantasy, Nibbler and the Donkey Kong 3 sound CPUs, the 6809 CPU core of Tutankham, Roc'n Rope, Circus Charlie, Mappy, The Tower of Druaga, Gaplus and Gyruss, and the NES APU of Donkey Kong 3, are GalaginoPlus's.
+- The MAME project, under the BSD-3-Clause licence, as the reference for the other boards: Data East's BurgerTime and Bump 'n' Jump with their DECO CPU-7 and C10707 decryption (David Haywood), SNK's Vanguard, Fantasy and Nibbler with their tone generator, Nintendo's Donkey Kong 3, Universal's Lady Bug and Mr. Do! (Nicola Salmoria), Nintendo's Donkey Kong Jr. (its sound CPU's connections), Midway's Space Invaders, Tehkan's Bomb Jack (Mirko Buffoni), Pinball Action and Star Force (Nicola Salmoria), Konami's Time Pilot, Pooyan, Tutankham, Roc'n Rope, Circus Charlie and Gyruss with their KONAMI-1 decryption and sound board, Namco's Mappy, The Tower of Druaga and Gaplus with their custom I/O chips and 15XX sound chip, Namco's Xevious with its background map ROMs and 06XX interface, and the SN76496 sound chip.
+- [pico-mooncresta](https://github.com/PicoPlus-devel/pico-mooncresta) and the MAME project (galaxian.cpp, galaxian_v.cpp, galaxian_a.cpp: Aaron Giles, Couriersud, Stephane Humbert, Robbbert, K. Wilkins, Derrick Renaud), under the BSD-3-Clause licence: the Galaxian hardware and the discrete sound of Galaxian and Moon Cresta.
 - Z80 CPU core: the MAME project, Juergen Buchmueller and Andrei I. Holub, under the BSD-3-Clause licence. See [galagino/LICENSE](galagino/LICENSE) for the origin of every file.
 - miniz (inflate and CRC32): Rich Geldreich and others; see the licence text in [third_party/miniz/miniz.c](third_party/miniz/miniz.c).
 - Framework, menu, display, audio and controller support: [pico_shared](https://github.com/PicoPlus-devel/pico_shared) and the sister projects listed above.
 
 pico-galagino is distributed under the GNU General Public License v3.0; see [LICENSE](LICENSE).
 
-Pac-Man is copyright 1980 Namco (Midway in North America), Galaga 1981 and Dig Dug 1982 Namco, Donkey Kong 1981 Nintendo, Frogger 1981 Konami (Sega/Gremlin), and 1942 1984 Capcom. This project is not affiliated with these companies, with Galagino or with the MAME project.
+Pac-Man is copyright 1980 Namco (Midway in North America), Galaga 1981 and Dig Dug 1982 Namco, Donkey Kong 1981 Nintendo, Frogger 1981 Konami (Sega/Gremlin), and 1942 1984 Capcom. The other games are copyright their respective owners. This project is not affiliated with these companies, with Galagino, GalaginoPlus or the MAME project.

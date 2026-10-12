@@ -1,4 +1,4 @@
-The files in this directory come from three sources.
+The files in this directory come from four sources.
 
 1. Galagino by Till Harbaum (https://github.com/harbaum/galagino, main at
    commit cdd21cdf6e1b), published under the GNU General Public License v3.0
@@ -23,7 +23,30 @@ The files in this directory come from three sources.
      game_pacman.c, game_galaga.c, game_dkong.c, game_frogger.c,
      game_digdug.c, game_1942.c, gal_gfx.c, gal_sound.c, gal_menu.c
 
-2. The MAME project (https://github.com/mamedev/mame), under the BSD-3-Clause
+2. GalaginoPlus by VirtualClaudioBoy
+   (https://github.com/VirtualClaudioBoy/GalaginoPlus, main at commit
+   18b875f9a590), a fork of Galagino published under the GNU General Public
+   License v3.0 (its LICENSE file):
+
+     gal_hiscore.c               ported to C from source/src/emulation/
+                                 hiscore.cpp
+     the high score tables in game_*.c, from the machines' hiscoreRegions()
+     the ROM tables of the games new in GalaginoPlus in gal_games.c, from the
+     files its romconv scripts read
+     data/*_logo.h of those games, unchanged
+     data/dkong_sample_fall.h, its recording of the Donkey Kong fall, unchanged
+     m6502.c, m6502.h, its 6502 core (source/src/cpus/m6502), written for it;
+     changed for this port: a page table, pointers wrapping in page zero, a
+     cycle budget, the written flag of the DECO CPU-7 and a held IRQ
+     m6809.c, m6809.h, its 6809 core (source/src/cpus/m6809), written for it;
+     changed for this port: the memory callbacks and a page table per
+     instance, a separate opcode fetch (KONAMI-1) and a cycle budget
+     the NES APU in game_dkong.c, ported to C from its dkong3.cpp
+     data/spaceinvaders_samples.h, its recordings of the Space Invaders shot
+     and invader hit, unchanged; the rest of the Space Invaders sound in
+     game_invaders.c follows its approximation of the discrete sound board
+
+3. The MAME project (https://github.com/mamedev/mame), under the BSD-3-Clause
    licence below, taken from pico-mooncresta (MAME master at commit
    1ecdb5701405):
 
@@ -39,12 +62,62 @@ The files in this directory come from three sources.
    Timing and interrupt details of the games follow MAME's drivers
    (src/mame/namco/galaga.cpp, src/mame/galaxian/galaxian.cpp).
 
-3. Original to pico-galagino, under the GNU General Public License v3.0 with
+   game_pacman.c follows, for the games of the Pac-Man board, MAME master
+   (October 2026) where they differ from Pac-Man: the Ms. Pac-Man decryption
+   and patches, the Crush Roller protection, the Eyes and Mr. TNT decoding, the
+   memory maps, inputs and sprite placement (src/mame/pacman/pacman.cpp,
+   pacman_v.cpp: Nicola Salmoria, Stephane Humbert), The Glob's EPOS
+   decryption (pacman_m.cpp: smf, Mike Balfour, David Widel), Pengo
+   (pengo.cpp: Nicola Salmoria) and the Sega 315-5010 decryption
+   (src/devices/machine/segacrpt_device.cpp: Nicola Salmoria, David Haywood).
+
+   game_galaxian.c: the Galaxian hardware and Konami's variants, from MAME's
+   src/mame/galaxian/galaxian.cpp and galaxian_v.cpp (Aaron Giles,
+   Couriersud, Stephane Humbert, Robbbert) by way of pico-mooncresta's
+   mooncresta.c; mooncresta_sound.c, mooncresta_sound.h, mcr_math.h,
+   mcr_port.h: pico-mooncresta (commit 1390f17), from galaxian_a.cpp
+   (Couriersud, K. Wilkins, Derrick Renaud), unchanged.
+
+   i8085.c, i8085.h, tms36xx.c, tms36xx.h, phoenix.c, phoenix.h,
+   phoenix_sound.c, phoenix_sound.h: pico-phoenix (commit 3d42644), unchanged:
+   src/devices/cpu/i8085/i8085.cpp (Juergen Buchmueller, Roberto Fresca, Grull
+   Osgo), src/devices/sound/tms36xx.cpp (Juergen Buchmueller),
+   src/mame/phoenix/phoenix.cpp and phoenix_v.cpp (Richard Davies) and
+   phoenix_a.cpp with the discrete modules of src/devices/sound (Juergen
+   Buchmueller, Derrick Renaud, K. Wilkins). phx_math.h is pico-phoenix's own,
+   under the GNU General Public License v3.0; phx_port.h is this project's.
+
+   Donkey Kong Jr. in game_dkong.c follows src/mame/nintendo/dkong.cpp and
+   dkong_a.cpp (its memory map, ROM layout and sound CPU connections);
+   game_universal.c follows src/mame/universal/ladybug.cpp, ladybug_video.cpp,
+   mrdo.cpp and mrdo_v.cpp (Nicola Salmoria); game_invaders.c
+   src/mame/midw8080/mw8080bw.cpp; game_bombjack.c src/mame/tecmo/bombjack.cpp
+   (Mirko Buffoni) and the watchdog of src/devices/machine/watchdog.cpp;
+   game_pbaction.c src/mame/tecmo/pbaction.cpp and game_starforce.c
+   src/mame/tecmo/senjyo.cpp (Nicola Salmoria); the Z80 CTC in gal_sound.c
+   src/devices/machine/z80ctc.cpp; the SN76496 in gal_sound.c
+   src/devices/sound/sn76496.cpp (Nicola Salmoria); Bagman in game_galaxian.c
+   galaxian.cpp's bagmanmc; game_btime.c src/mame/dataeast/btime.cpp, with
+   the DECO CPU-7 of decocpu7.cpp and the C10707 of deco222.cpp (David
+   Haywood); game_snk6502.c src/mame/snk/snk6502.cpp, snk6502_v.cpp and the
+   tone generator of snk6502_a.cpp; Donkey Kong 3 in game_dkong.c dkong.cpp
+   and dkong_a.cpp; game_timeplt.c src/mame/konami/timeplt.cpp, pooyan.cpp
+   and rocnrope.cpp; konami_snd.c src/mame/konami/timeplt_a.cpp;
+   game_tutankhm.c tutankhm.cpp; game_circusc.c circusc.cpp; game_gyruss.c
+   gyruss.cpp; the KONAMI-1 decryption of these src/devices/cpu/m6809/
+   konami1.cpp; game_mappy.c src/mame/namco/mappy.cpp; game_gaplus.c
+   gaplus.cpp; gal_namcoio.c namcoio.cpp; the Namco 15XX in gal_sound.c
+   src/devices/sound/namco.cpp; game_xevious.c xevious.cpp (Nicola
+   Salmoria), galaga.cpp and the 06XX of namco06.cpp, with GalaginoPlus's
+   model of the 50XX, 51XX and 54XX.
+
+4. Original to pico-galagino, under the GNU General Public License v3.0 with
    the rest of the project:
 
      galagino.h, gal_internal.h, gal_core.c, gal_games.c, gal_flash.c,
      gal_port.h, romload.c, romload.h (romload.c generalised from
-     pico-mooncresta)
+     pico-mooncresta); hosttest/flash_test.c and tools/mkupdateall.py outside
+     this directory
 
 --------------------------------------------------------------------------------
 

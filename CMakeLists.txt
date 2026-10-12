@@ -94,7 +94,33 @@ set(GALAGINO_CORE_SRC
     galagino/game_dkong.c
     galagino/game_digdug.c
     galagino/game_1942.c
+    galagino/game_galaxian.c
+    galagino/game_universal.c
+    galagino/game_phoenix.c
+    galagino/game_invaders.c
+    galagino/game_bombjack.c
+    galagino/game_pbaction.c
+    galagino/game_starforce.c
+    galagino/game_btime.c
+    galagino/game_snk6502.c
+    galagino/game_timeplt.c
+    galagino/konami_snd.c
+    galagino/m6809.c
+    galagino/game_tutankhm.c
+    galagino/game_circusc.c
+    galagino/game_mappy.c
+    galagino/gal_namcoio.c
+    galagino/game_gaplus.c
+    galagino/game_gyruss.c
+    galagino/game_xevious.c
+    galagino/m6502.c
+    galagino/i8085.c
+    galagino/phoenix.c
+    galagino/phoenix_sound.c
+    galagino/tms36xx.c
+    galagino/mooncresta_sound.c
     galagino/gal_flash.c
+    galagino/gal_hiscore.c
     galagino/i8048.c
     galagino/romload.c
     third_party/miniz/miniz.c
@@ -130,10 +156,27 @@ set_source_files_properties(${GALAGINO_CORE_SRC} PROPERTIES
 # pico_shared/drivers/pico_hdmi, only built when asked for.
 target_compile_definitions(${projectname} PRIVATE HSTX_CUSTOM_FRAME_SIZE=1)
 
-# EXTRA_CMAKE_ARGS=-DGALAGINO_FRAME_STATS=1 ./bld.sh ... prints the time spent
-# emulating and drawing a frame over the serial console (see main.cpp).
+# EXTRA_CMAKE_ARGS=-DGALAGINO_FRAME_STATS=1 ./bld.sh ... prints over the serial
+# console, every five seconds, the time spent emulating and drawing a frame, the
+# time left before the display needs the next one, and the parts the core and
+# the game count (gal_prof[] in galagino/gal_internal.h; see main.cpp).
 if(GALAGINO_FRAME_STATS)
     target_compile_definitions(${projectname} PRIVATE GALAGINO_FRAME_STATS=1)
+endif()
+
+# EXTRA_CMAKE_ARGS="-DGALAGINO_FRAME_STATS=1 -DGALAGINO_AUTOSTART=GAL_GAME_GYRUSS"
+# ./bld.sh ... starts that game at once instead of the menu, inserts a coin,
+# starts and plays it with fixed inputs, for profiling without anyone at the
+# board (see main.cpp). GAL_GAME_* are in galagino/galagino.h.
+if(GALAGINO_AUTOSTART)
+    target_compile_definitions(${projectname} PRIVATE GALAGINO_AUTOSTART=${GALAGINO_AUTOSTART})
+endif()
+
+# EXTRA_CMAKE_ARGS=-DGALAGINO_FLASH_CACHE_TEST=1 ./bld.sh ... runs the large
+# games from the flash cache on a board with PSRAM too, as on one without (for
+# testing that path on a Fruit Jam; see main.cpp).
+if(GALAGINO_FLASH_CACHE_TEST)
+    target_compile_definitions(${projectname} PRIVATE GALAGINO_FLASH_CACHE_TEST=1)
 endif()
 
 pico_set_program_name(${projectname} "${projectname}")
@@ -210,6 +253,11 @@ target_compile_definitions(${projectname} PUBLIC
     ENABLEDVI=1
     FRENS_FORCE_USB_MSC_IN_SETTINGS=1   # no ROM browser: offer USB drive mode in the in-game settings
     I2S_AUDIO_RING_SIZE=2048            # room for the audio cushion and a whole frame, see pushAudio() in main.cpp
+    # The flash cache (main.cpp) ends where the chip itself says it does
+    # (storage_get_flash_capacity()); the board header may set less, e.g. 4 MB
+    # for pico2. The SDK's flash_range_erase/program hard_assert against this,
+    # so it is the most XIP can reach. Spelled as BootPartition.cmake does.
+    PICO_FLASH_SIZE_BYTES=0x1000000
 )
 
 # ---------------------------------------------------------------------------

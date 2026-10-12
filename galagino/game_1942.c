@@ -613,6 +613,15 @@ static void GAL_HOT(g42_sound)(int16_t *out, int n)
     gal_ay_render(2, AY_CLOCK, AY_VOL, out, n);
 }
 
+
+/* High scores: MAME's hiscore.dat, as GalaginoPlus uses it. */
+static const gal_hiscore_region_t g42_hiscore[] = {
+    {0xe800, 0x190, 0x00, 0x00},
+    {0xe9c0, 0x001, 0x1e, 0x1e},
+    {0xe040, 0x008, 0x00, 0x00},
+    {0xe028, 0x001, 0x01, 0x01},
+};
+
 const gal_game_ops_t gal_1942_ops = {
     .init = g42_init,
     .reset = g42_reset,
@@ -622,11 +631,14 @@ const gal_game_ops_t gal_1942_ops = {
     .sound = g42_sound,
     .view_top = 16,
     .view_h = 256,
-    .needs_psram = 1,
+    .extra_button = 1,
+    .large = 1,
     .nderived = 2,
     .derived_src = {6, 7},
     .derived_size = {512 * 16 * 2 * 4, 512 * 16 * 2 * 4},
     .derive = g42_derive,
+    .hiscore = g42_hiscore,
+    .nhiscore = sizeof(g42_hiscore) / sizeof(g42_hiscore[0]),
 };
 
 #ifdef GAL_CONV_CHECK

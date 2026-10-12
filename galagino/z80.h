@@ -13,10 +13,15 @@
  *
  * Memory access goes through a 256-entry page table first: a non-NULL page is
  * read or written directly, anything else goes to the read/write callbacks.
- * Opcode fetches, operands, stack and data all use the same tables.
+ * Operands, stack and data all use the same tables; opcode fetches (M1, the
+ * prefix bytes included) look in op_page first, for CPUs whose opcodes are
+ * encrypted differently from their data (Sega 315-5010: Pengo): a table of
+ * 256 pages the game provides, NULL (as it is unless a game sets it) or with
+ * NULL entries where opcodes are read as data.
  *
- * Taken from pico-mooncresta. The only addition is z80_hold_irq(), MAME's
- * HOLD_LINE: an IRQ that stays asserted until the CPU acknowledges it.
+ * Taken from pico-mooncresta. The additions are z80_hold_irq(), MAME's
+ * HOLD_LINE: an IRQ that stays asserted until the CPU acknowledges it, and
+ * op_page, MAME's separate opcode space.
  */
 #ifndef Z80_H
 #define Z80_H
@@ -65,6 +70,7 @@ typedef struct z80
 
     const uint8_t *rd_page[256];
     uint8_t *wr_page[256];
+    const uint8_t *const *op_page; /* NULL, or 256 pages of decrypted opcodes, see above */
     uint8_t (*read)(struct z80 *cpu, uint16_t addr);
     void (*write)(struct z80 *cpu, uint16_t addr, uint8_t data);
     uint8_t (*in)(struct z80 *cpu, uint16_t port);
