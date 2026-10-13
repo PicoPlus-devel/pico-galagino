@@ -23,6 +23,9 @@ permissions:
 #
 # NOTE: the released .uf2 files contain NO game ROM data. The ROM sets are
 # supplied by the user on the SD card and are never built, stored or published here.
+# updateAll.exe, the ROM set installer for Windows that is released alongside, is
+# built from pico-bootLoader and holds no ROM data either: it fetches the sets on
+# the user's computer.
 jobs:
     build-release:
         runs-on: self-hosted
@@ -59,10 +62,26 @@ jobs:
                  export PICO_PIO_USB_PATH=/datalocal/Pico-PIO-USB
                  ./buildAll.sh
 
+          # updateAll is maintained in pico-bootLoader. Its main branch is used:
+          # it knows every set of this application.
+          - name: Check out pico-bootLoader, for updateAll.exe
+            uses: actions/checkout@v6
+            with:
+                repository: PicoPlus-devel/pico-bootLoader
+                path: pico-bootLoader
+                fetch-depth: 0          # tags, so that updateAll.exe gets a version
+                filter: blob:none
+                sparse-checkout: updateAll
+
+          - name: Build updateAll.exe, the ROM set installer for Windows (needs mingw-w64 on the runner)
+            run: |
+                 pico-bootLoader/updateAll/win/build.sh
+
           - name: Create release
             uses: softprops/action-gh-release@v3
             if: startsWith(github.ref, 'refs/tags/')  && github.event_name == 'push'
             with:
               files: |
                 releases/*.uf2
+                pico-bootLoader/updateAll/win/build/updateAll.exe
               body_path: CHANGELOG.md

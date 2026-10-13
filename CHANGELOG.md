@@ -19,7 +19,8 @@ Arcade games for RP2350 boards with DVI/HDMI output: Pac-Man, Galaga, Donkey Kon
 - High scores are saved on the SD card, in `/SAVES/GALAGINO`, and are back the next time a game is played (from GalaginoPlus).
 - On boards without PSRAM, the large games (1942, Bomb Jack, Pinball Action, Star Force, Donkey Kong 3, BurgerTime, Bump 'n' Jump, Tutankham, Roc'n Rope, Circus Charlie, The Tower of Druaga, Gaplus, Gyruss, Xevious) are copied into flash the first time they are started instead of at every start-up with new ROM sets: the board shows a notice, restarts once and starts the game, which takes a few seconds. The other games are read from the SD card when they start.
 - In the game menu, left and right move three games at a time.
-- pico-bootLoader's updateAll now installs the ROM sets of the games of GalaginoPlus as well; they appear in the menu as they are added. The board no longer creates the game folders.
+- pico-bootLoader's updateAll now installs the ROM sets of all these games. The board no longer creates the game folders.
+- The release now includes updateAll.exe, which installs the ROM sets on the SD card from a Windows computer. The readme explains how to use it.
 
 ## v0.1.2
 

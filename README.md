@@ -1,6 +1,6 @@
 # pico-galagino
 
-**pico-galagino** runs arcade games of the early 1980s on RP2350-based microcontroller boards, with video and audio over DVI/HDMI: **Pac-Man**, **Ms. Pac-Man**, **Galaga**, **Donkey Kong**, **Frogger**, **Dig Dug**, **1942**, **Pengo**, **Crush Roller**, **Eyes**, **Mr. TNT**, **Lizard Wizard**, **The Glob**, **Ali Baba and 40 Thieves**, **Galaxian**, **Moon Cresta**, **Scramble**, **Super Cobra**, **Turtles**, **Amidar** and **Anteater**. It is a port of [Galagino](https://github.com/harbaum/galagino) by Till Harbaum, an emulator of arcade games for the ESP32, and of its fork [GalaginoPlus](https://github.com/VirtualClaudioBoy/GalaginoPlus), with the Z80 CPU core of [MAME](https://www.mamedev.org/). A game is chosen from Galagino's menu of game logos at start-up.
+**pico-galagino** runs 47 arcade games of the late 1970s and early 1980s on RP2350-based microcontroller boards, with video and audio over DVI/HDMI, among them **Pac-Man**, **Galaga**, **Donkey Kong**, **Frogger**, **Dig Dug**, **1942**, **Space Invaders**, **Mr. Do!**, **BurgerTime**, **Time Pilot**, **Mappy** and **Xevious**; [Game data](#game-data) lists them all. It is a port of [Galagino](https://github.com/harbaum/galagino) by Till Harbaum, an emulator of arcade games for the ESP32, and of its fork [GalaginoPlus](https://github.com/VirtualClaudioBoy/GalaginoPlus), with CPU cores from [MAME](https://www.mamedev.org/) and GalaginoPlus. A game is chosen from Galagino's menu of game logos at start-up.
 
 It uses the same menu, display, audio and controller framework as this family of emulators:
 
@@ -21,11 +21,11 @@ pico-galagino runs standalone, or as an application of [pico-bootLoader](https:/
 
 ## Screenshots
 
-The games as the emulator draws them, at twice the original size, with *Tate mode* off. For the two tate orientations, see [Display and tate mode](#display-and-tate-mode).
+The game menu and the 47 games, in the order of [Game data](#game-data), as the emulator draws them, at twice the original size, with *Tate mode* off. For the two tate orientations, see [Display and tate mode](#display-and-tate-mode).
 
 <table>
   <tr>
-    <td><img width="320" alt="The game menu: the Pac-Man, Galaga and Donkey Kong logos, Galaga selected" src="docs/screenshots/menu.png" /></td>
+    <td><img width="320" alt="The game menu: the Frogger, Galaga and Galaxian logos, Galaga selected" src="docs/screenshots/menu.png" /></td>
     <td><img width="320" alt="Pac-Man in the maze, chased by the four ghosts" src="docs/screenshots/pacman.png" /></td>
     <td><img width="320" alt="Galaga: the fighter below a formation of aliens in a starfield" src="docs/screenshots/galaga.png" /></td>
   </tr>
@@ -46,13 +46,143 @@ The games as the emulator draws them, at twice the original size, with *Tate mod
   </tr>
   <tr>
     <td><img width="320" alt="1942: the player's plane on the deck of the aircraft carrier" src="docs/screenshots/1942.png" /></td>
-    <td></td>
-    <td></td>
+    <td><img width="320" alt="Ms. Pac-Man in the first maze, chased by the ghosts" src="docs/screenshots/mspacman.png" /></td>
+    <td><img width="320" alt="Pengo: the penguin in the maze of ice blocks, with the Sno-Bees" src="docs/screenshots/pengo.png" /></td>
   </tr>
   <tr>
     <td align="center">1942</td>
-    <td></td>
-    <td></td>
+    <td align="center">Ms. Pac-Man</td>
+    <td align="center">Pengo</td>
+  </tr>
+  <tr>
+    <td><img width="320" alt="Crush Roller: the paint roller in the maze, part of it painted green" src="docs/screenshots/crush.png" /></td>
+    <td><img width="320" alt="Eyes: the maze of dots, with the eyes" src="docs/screenshots/eyes.png" /></td>
+    <td><img width="320" alt="Mr. TNT: the maze of paths between the stone blocks" src="docs/screenshots/mrtnt.png" /></td>
+  </tr>
+  <tr>
+    <td align="center">Crush Roller</td>
+    <td align="center">Eyes</td>
+    <td align="center">Mr. TNT</td>
+  </tr>
+  <tr>
+    <td><img width="320" alt="Lizard Wizard: the wizard on the ground beside the tower, with fireballs falling" src="docs/screenshots/lizwiz.png" /></td>
+    <td><img width="320" alt="The Glob: the building with its floors and elevators" src="docs/screenshots/theglob.png" /></td>
+    <td><img width="320" alt="Ali Baba and 40 Thieves: the brick maze with Ali Baba and the thieves" src="docs/screenshots/alibaba.png" /></td>
+  </tr>
+  <tr>
+    <td align="center">Lizard Wizard</td>
+    <td align="center">The Glob</td>
+    <td align="center">Ali Baba and 40 Thieves</td>
+  </tr>
+  <tr>
+    <td><img width="320" alt="Galaxian: the alien convoy above the player's ship" src="docs/screenshots/galaxian.png" /></td>
+    <td><img width="320" alt="Moon Cresta: the rocket below a group of Cold Eye aliens" src="docs/screenshots/mooncrst.png" /></td>
+    <td><img width="320" alt="Scramble: the ship over the mountains, with a rocket on the ground" src="docs/screenshots/scramble.png" /></td>
+  </tr>
+  <tr>
+    <td align="center">Galaxian</td>
+    <td align="center">Moon Cresta</td>
+    <td align="center">Scramble</td>
+  </tr>
+  <tr>
+    <td><img width="320" alt="Super Cobra: the helicopter between the ground and the roof of a cave" src="docs/screenshots/scobra.png" /></td>
+    <td><img width="320" alt="Turtles: the maze of houses, with the turtle and the beetles" src="docs/screenshots/turtles.png" /></td>
+    <td><img width="320" alt="Amidar: the grid of paths with the warriors at the top" src="docs/screenshots/amidar.png" /></td>
+  </tr>
+  <tr>
+    <td align="center">Super Cobra</td>
+    <td align="center">Turtles</td>
+    <td align="center">Amidar</td>
+  </tr>
+  <tr>
+    <td><img width="320" alt="Anteater: the anteater above the ant hill and its tunnels" src="docs/screenshots/anteater.png" /></td>
+    <td><img width="320" alt="Van-Van Car: the maze of roads between the trees" src="docs/screenshots/vanvan.png" /></td>
+    <td><img width="320" alt="Lady Bug: the maze with its turnstile gates" src="docs/screenshots/ladybug.png" /></td>
+  </tr>
+  <tr>
+    <td align="center">Anteater</td>
+    <td align="center">Van-Van Car</td>
+    <td align="center">Lady Bug</td>
+  </tr>
+  <tr>
+    <td><img width="320" alt="Mr. Do!: the garden with its cherries, apples and tunnels" src="docs/screenshots/mrdo.png" /></td>
+    <td><img width="320" alt="Bagman: the mine with its ladders and bags of gold" src="docs/screenshots/bagman.png" /></td>
+    <td><img width="320" alt="Space Invaders: the rows of invaders above the four shields and the laser base" src="docs/screenshots/invaders.png" /></td>
+  </tr>
+  <tr>
+    <td align="center">Mr. Do!</td>
+    <td align="center">Bagman</td>
+    <td align="center">Space Invaders</td>
+  </tr>
+  <tr>
+    <td><img width="320" alt="Phoenix: the first wave of birds above the player's ship" src="docs/screenshots/phoenix.png" /></td>
+    <td><img width="320" alt="Bomb Jack: Jack among the bombs in front of the Sphinx and a pyramid" src="docs/screenshots/bombjack.png" /></td>
+    <td><img width="320" alt="Pinball Action: the pinball table" src="docs/screenshots/pbaction.png" /></td>
+  </tr>
+  <tr>
+    <td align="center">Phoenix</td>
+    <td align="center">Bomb Jack</td>
+    <td align="center">Pinball Action</td>
+  </tr>
+  <tr>
+    <td><img width="320" alt="Star Force: the player's ship over a space fortress" src="docs/screenshots/starforc.png" /></td>
+    <td><img width="320" alt="Donkey Kong Jr.: the vines and platforms, Donkey Kong in his cage at the top" src="docs/screenshots/dkongjr.png" /></td>
+    <td><img width="320" alt="Donkey Kong 3: Donkey Kong between the vines of the greenhouse, with the bees" src="docs/screenshots/dkong3.png" /></td>
+  </tr>
+  <tr>
+    <td align="center">Star Force</td>
+    <td align="center">Donkey Kong Jr.</td>
+    <td align="center">Donkey Kong 3</td>
+  </tr>
+  <tr>
+    <td><img width="320" alt="BurgerTime: the girders and ladders with the parts of the burgers" src="docs/screenshots/btime.png" /></td>
+    <td><img width="320" alt="Bump 'n' Jump: the road with the player's car among the other cars" src="docs/screenshots/bnj.png" /></td>
+    <td><img width="320" alt="Vanguard: the ship in a cave, with enemy ships and an explosion" src="docs/screenshots/vanguard.png" /></td>
+  </tr>
+  <tr>
+    <td align="center">BurgerTime</td>
+    <td align="center">Bump 'n' Jump</td>
+    <td align="center">Vanguard</td>
+  </tr>
+  <tr>
+    <td><img width="320" alt="Fantasy: the balloon over the sea and an island" src="docs/screenshots/fantasy.png" /></td>
+    <td><img width="320" alt="Nibbler: the snake in the maze" src="docs/screenshots/nibbler.png" /></td>
+    <td><img width="320" alt="Time Pilot: the plane among the clouds and the biplanes of 1910" src="docs/screenshots/timeplt.png" /></td>
+  </tr>
+  <tr>
+    <td align="center">Fantasy</td>
+    <td align="center">Nibbler</td>
+    <td align="center">Time Pilot</td>
+  </tr>
+  <tr>
+    <td><img width="320" alt="Pooyan: the wolves coming down on balloons, the mother pig in the lift on the right" src="docs/screenshots/pooyan.png" /></td>
+    <td><img width="320" alt="Tutankham: the explorer in the tomb, with its creatures" src="docs/screenshots/tutankhm.png" /></td>
+    <td><img width="320" alt="Roc'n Rope: the cliffs with their ledges, the explorer and the dinosaurs" src="docs/screenshots/rocnrope.png" /></td>
+  </tr>
+  <tr>
+    <td align="center">Pooyan</td>
+    <td align="center">Tutankham</td>
+    <td align="center">Roc'n Rope</td>
+  </tr>
+  <tr>
+    <td><img width="320" alt="Circus Charlie: Charlie riding the lion towards a ring of fire" src="docs/screenshots/circusc.png" /></td>
+    <td><img width="320" alt="Mappy: the mansion with its floors, trampolines, doors and the cats" src="docs/screenshots/mappy.png" /></td>
+    <td><img width="320" alt="The Tower of Druaga: Gilgamesh in the maze of the first floor, with the slimes" src="docs/screenshots/todruaga.png" /></td>
+  </tr>
+  <tr>
+    <td align="center">Circus Charlie</td>
+    <td align="center">Mappy</td>
+    <td align="center">The Tower of Druaga</td>
+  </tr>
+  <tr>
+    <td><img width="320" alt="Gaplus: a formation of aliens above the player's ship" src="docs/screenshots/gaplus.png" /></td>
+    <td><img width="320" alt="Gyruss: the ship on its circle, with a wave of enemies coming in" src="docs/screenshots/gyruss.png" /></td>
+    <td><img width="320" alt="Xevious: the Solvalou over the forest, with a ground target" src="docs/screenshots/xevious.png" /></td>
+  </tr>
+  <tr>
+    <td align="center">Gaplus</td>
+    <td align="center">Gyruss</td>
+    <td align="center">Xevious</td>
   </tr>
 </table>
 
@@ -60,7 +190,7 @@ The games as the emulator draws them, at twice the original size, with *Tate mod
 
 ## GalaginoPlus
 
-pico-galagino follows [GalaginoPlus](https://github.com/VirtualClaudioBoy/GalaginoPlus) by VirtualClaudioBoy, a fork of Galagino with 48 games, and is being extended to its games. It already knows the ROM sets of 47 of them, so that pico-bootLoader's updateAll installs them all; a game appears in the menu once it has been ported. Scrambled Egg is left out: its set is not available from the source updateAll downloads from. Phoenix and Moon Cresta use the same folders and sets as [pico-phoenix](https://github.com/PicoPlus-devel/pico-phoenix) and [pico-mooncresta](https://github.com/PicoPlus-devel/pico-mooncresta).
+pico-galagino follows [GalaginoPlus](https://github.com/VirtualClaudioBoy/GalaginoPlus) by VirtualClaudioBoy, a fork of Galagino with 48 games, and plays 47 of them. Scrambled Egg is left out: its set is not available from the source updateAll downloads from. Phoenix and Moon Cresta use the same folders and sets as [pico-phoenix](https://github.com/PicoPlus-devel/pico-phoenix) and [pico-mooncresta](https://github.com/PicoPlus-devel/pico-mooncresta).
 
 ***
 
@@ -125,7 +255,16 @@ A set can be copied in either form:
 
 Files are recognised by their size and CRC32, so their names and their place in an archive do not matter, and a corrupt or different file is never loaded.
 
-**pico-bootLoader's updateAll** downloads the sets and writes them, unzipped, into these folders, together with those of the games that are still to come (see [GalaginoPlus](#galaginoplus)). It runs on a computer with the SD card inserted; see the [pico-bootLoader README](https://github.com/PicoPlus-devel/pico-bootLoader). The board does not create the folders itself.
+**updateAll installs the sets.** `updateAll.exe`, a program for Windows 10 and 11, is included in every release of pico-galagino, among the files at the end of the release page. It runs on a computer with the SD card inserted: it takes the MAME zips from a folder of your choice, downloads those that are missing, and writes the sets, unzipped, into the folders above. It is a single file and needs no installation. The program is not signed, so Windows may show "Windows protected your PC" the first time it is started; select **More info**, then **Run anyway**.
+
+1. Start `updateAll.exe`. It selects a removable drive by itself; under **SD card**, check that it is the card, or choose another.
+2. Under **Zip folder**, choose the folder with the MAME zips you already have, if any.
+3. Untick the sets that are not wanted. updateAll also installs the sets of other applications of this family, such as pico-outrun and pico-dragonslair. The **Status** column shows which sets are already complete on the card.
+4. Select **Install**.
+
+By default, zips that are not in the zip folder are downloaded from [ArcadeROMsDB_MiSTer](https://github.com/zakk4223/ArcadeROMsDB_MiSTer), a third-party database that is not part of this project. The user is responsible for holding the rights to the ROM sets, whether they are supplied as zips or downloaded. To use only your own zips, untick **Download missing zips**.
+
+updateAll is maintained in [pico-bootLoader](https://github.com/PicoPlus-devel/pico-bootLoader), whose SD-card archive carries it as well. The same installer is also available there as a Python script, `updateAll.py`, for Linux and macOS, and as a PowerShell script, `updateAll.ps1`. The [updateAll README](https://github.com/PicoPlus-devel/pico-bootLoader/blob/main/updateAll/README.md) describes all three and their options. The board does not create the folders itself.
 
 The game menu lists the games whose sets are complete. When no set is found, the board shows a screen that explains where the sets go. **SELECT + START** opens the settings menu from that screen; its *USB drive mode* shows the SD card on a computer, so the sets can be copied to it without removing the card. After leaving the menu, the board restarts and looks for the sets again.
 
@@ -291,6 +430,7 @@ hosttest/conv_check.py ~/roms/arcade path/to/galagino /tmp/conv_check
 - [pico-mooncresta](https://github.com/PicoPlus-devel/pico-mooncresta) and the MAME project (galaxian.cpp, galaxian_v.cpp, galaxian_a.cpp: Aaron Giles, Couriersud, Stephane Humbert, Robbbert, K. Wilkins, Derrick Renaud), under the BSD-3-Clause licence: the Galaxian hardware and the discrete sound of Galaxian and Moon Cresta.
 - Z80 CPU core: the MAME project, Juergen Buchmueller and Andrei I. Holub, under the BSD-3-Clause licence. See [galagino/LICENSE](galagino/LICENSE) for the origin of every file.
 - miniz (inflate and CRC32): Rich Geldreich and others; see the licence text in [third_party/miniz/miniz.c](third_party/miniz/miniz.c).
+- updateAll, the ROM set installer included in the releases as `updateAll.exe`: [pico-bootLoader](https://github.com/PicoPlus-devel/pico-bootLoader/tree/main/updateAll), under the GNU General Public License v3.0, built with miniz and cJSON (MIT licence). Its source is in that repository.
 - Framework, menu, display, audio and controller support: [pico_shared](https://github.com/PicoPlus-devel/pico_shared) and the sister projects listed above.
 
 pico-galagino is distributed under the GNU General Public License v3.0; see [LICENSE](LICENSE).
