@@ -1311,6 +1311,9 @@ static void processPerFrame()
         const int game = gal_menu_frame(in);
         if (game >= 0)
         {
+            // a start without any button held is the menu's attract timeout
+            if (!in)
+                printf("Attract mode: %s\n", gal_games[game].title);
             startGame(game);
             bordersValid = false;
             paceFrame(true);

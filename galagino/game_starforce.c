@@ -40,6 +40,7 @@ static struct
     const uint8_t *dac_prom;
     uint32_t *fg;
     const uint32_t *bg[3], *spr;
+    uint16_t *bg_rows[3]; /* a bit per row of each tile that is not all pen 0 */
     uint16_t *colors; /* [512], in the arena */
     uint8_t *stripe; /* [256], the background pen of each raster column */
     uint8_t stripes_on;
@@ -257,6 +258,25 @@ static int sf_init(uint8_t *const *regions)
         }
     }
 
+    /* Most of the layers is transparent: their rows of pen 0 are known
+     * here, in SRAM, so draw_layer passes over them without reading the
+     * tiles from PSRAM or flash. */
+    for (int k = 0; k < 3; k++)
+    {
+        sf.bg_rows[k] = (uint16_t *)gal_fast_alloc(big_count[k] * 2);
+        if (!sf.bg_rows[k])
+            return 0;
+        for (int t = 0; t < big_count[k]; t++)
+        {
+            const uint32_t *w = sf.bg[k] + t * (BIG_BYTES / 4);
+            uint16_t m = 0;
+            for (int r = 0; r < 16; r++)
+                if (w[2 * r] | w[2 * r + 1])
+                    m |= (uint16_t)(1 << r);
+            sf.bg_rows[k][t] = m;
+        }
+    }
+
     z80_t *cpu = &gal.cpu[0];
     for (int p = 0; p < 0x80; p++)
         cpu->rd_page[p] = sf.rom + 256 * p;
@@ -461,6 +481,11 @@ static void draw_layer(const gal_band_t *b, int k)
         for (int x = r.x0 - ((r.x0 + sx) & 15); x <= r.x1; x += 16)
         {
             const uint8_t code = ram[row * 16 + (((x + sx) & 255) >> 4)];
+            /* the tile's rows in the band: upright rows UP_Y(x) .. + 15 */
+            const int lo = b->y0 - UP_Y(x), hi = b->y0 + b->h - 1 - UP_Y(x);
+            const uint32_t in_band = (lo > 0 ? 0xffffu << lo : 0xffffu) & (hi < 15 ? 0xffffu >> (15 - hi) : 0xffffu);
+            if (!(sf.bg_rows[k][code] & in_band))
+                continue;
             int color = code >> 5;
             if (k == 0) /* bitswap<3>(color, 1, 0, 2) */
                 color = ((color & 2) << 1) | ((color & 1) << 1) | ((color >> 2) & 1);

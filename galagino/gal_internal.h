@@ -491,6 +491,13 @@ static inline uint32_t gal_rev2(uint32_t v)
     return (v >> 16) | (v << 16);
 }
 
+/* The eight four-bit pixels of a word in the opposite order. */
+static inline uint32_t gal_rev4(uint32_t v)
+{
+    v = __builtin_bswap32(v);
+    return ((v >> 4) & 0x0f0f0f0fu) | ((v & 0x0f0f0f0fu) << 4);
+}
+
 /* A 16x16 sprite, two bits per pixel (rows of 32 bits, leftmost pixel in the
  * low bits). Colour 0 is transparent (Pac-Man, Galaga, Dig Dug), or pen 0
  * (pen0 set: Frogger, Donkey Kong), as in Galagino. flipy reads the rows
@@ -552,7 +559,9 @@ static inline void gal_draw_sprite(const gal_band_t *b, int sx, int sy, const ui
 }
 
 /* An s x s element of gal_conv_4bpp (s = 8, 16 or 32), flipped as asked;
- * pen 0 is transparent unless opaque is set. */
+ * pen 0 is transparent unless opaque is set. A row the band does not clip is
+ * drawn a word (eight pixels) at a time, a word of transparent pixels
+ * skipped: most of what the layered games draw (Star Force) is. */
 static inline void gal_draw_4bpp(const gal_band_t *b, int px, int py, int s, const uint32_t *rows, int flipx,
                                  int flipy, const uint16_t *colors, int opaque)
 {
@@ -567,12 +576,32 @@ static inline void gal_draw_4bpp(const gal_band_t *b, int px, int py, int s, con
         xe = b->x0 + b->w;
     if (ys >= ye || xs >= xe)
         return;
-    const int wpr = s >> 3;
+    const int wpr = s >> 3, whole = xs == px && xe == px + s;
     uint16_t *row = b->buf + (ys - b->y0) * b->w - b->x0;
     for (int y = ys; y < ye; y++, row += b->w)
     {
         const int r = flipy ? py + s - 1 - y : y - py;
         const uint32_t *w = rows + r * wpr;
+        if (whole)
+        {
+            uint16_t *d = row + px;
+            for (int i = 0; i < wpr; i++, d += 8)
+            {
+                uint32_t pix = w[flipx ? wpr - 1 - i : i];
+                if (!pix && !opaque)
+                    continue;
+                if (flipx)
+                    pix = gal_rev4(pix);
+#pragma GCC unroll 8
+                for (int c = 0; c < 8; c++, pix >>= 4)
+                {
+                    const unsigned pen = pix & 15;
+                    if (pen || opaque)
+                        d[c] = colors[pen];
+                }
+            }
+            continue;
+        }
         for (int x = xs; x < xe; x++)
         {
             const int c = flipx ? px + s - 1 - x : x - px;

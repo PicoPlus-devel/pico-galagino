@@ -311,7 +311,8 @@ uint32_t gal_psram_size(void);
 
 /* --- The game menu ------------------------------------------------------- */
 
-/* Shows Galagino's logo menu with the games in `installed`. */
+/* Shows Galagino's logo menu with the games in `installed`. Stops the game,
+ * if one is running: the menu keeps tables in its arena. */
 void gal_menu_init(gal_games_t installed);
 
 /* One frame of the menu. Returns the game to start, or -1. After 20 seconds
