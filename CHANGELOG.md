@@ -24,13 +24,13 @@ Arcade games for RP2350 boards with DVI/HDMI output: Pac-Man, Galaga, Donkey Kon
 - Fixed: after quitting a game, the game menu no longer started a random game after 20 seconds without input.
 - Fixed: with *Tate mode* on, the game menu showed a diagonal tear while it scrolled.
 - pico-bootLoader's updateAll now installs the ROM sets of all these games. The board no longer creates the game folders.
-- The release now includes updateAll.exe, which installs the ROM sets on the SD card from a Windows computer. The readme explains how to use it.
+- The release now includes updateAll.exe, which installs the ROM sets on the SD card from a Windows computer: it takes them from a folder of MAME zips and downloads those that are missing. Scripts for Linux and macOS are available as well. The readme explains how to use it.
 
 ## v0.1.2
 
 - Fixed: 1942 did not always keep up with 60 frames per second, which made its sound stutter. It now runs at full speed with time to spare.
 - Fixed: on boards such as the Adafruit Fruit Jam, the sound of all games dropped out briefly every few seconds, over HDMI as well as on the headphone output.
-- Improved: on boards with HSTX video output, such as the Adafruit Fruit Jam, the upright picture (*Tate mode* off) now shows every line of the game instead of leaving some out.
+- Improved: on boards with HSTX video output, such as the Adafruit Fruit Jam, the upright picture (*Tate mode* off) now shows every line of the game instead of leaving some out. Boards with PicoDVI output still leave out some lines.
 
 ## v0.1.1
 

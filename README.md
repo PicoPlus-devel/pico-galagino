@@ -15,7 +15,7 @@ It uses the same menu, display, audio and controller framework as this family of
 
 pico-galagino runs standalone, or as an application of [pico-bootLoader](https://github.com/PicoPlus-devel/pico-bootLoader) (v0.7 and later), where it appears in the **Arcade** category.
 
-**The ROM sets of the games are not included and must be supplied by the user.** They are copyright of their manufacturers and are not distributed with this project. See [Game data](#game-data).
+**The ROM sets of the games are not included and must be supplied by the user.** They are copyright of their manufacturers and are not distributed with this project. `updateAll.exe`, included in every release, installs the sets on the SD card from a Windows computer: it takes them from a folder of MAME zips and downloads those that are missing. Scripts for Linux and macOS are available as well. See [Game data](#game-data).
 
 ***
 
@@ -295,6 +295,8 @@ All the games run on every board. The converted graphics of 1942 take about 230 
 | 14 | Adafruit Feather RP2350 with HSTX Port and TLV320DAC3100 I2S DAC | HSTX | `picoGalagino_AdafruitFeatherRP2350_TLV320DAC3100_arm_piousb.uf2` |
 | 15 | Olimex RP2040-PICO-PC with a Raspberry Pi Pico 2 | HSTX | `picoGalagino_OlimexPicoPC_arm.uf2` |
 
+The video back-end affects the upright picture (*Tate mode* off). Boards with HSTX output show every line of the game, scaled to the height of the screen. Boards with PicoDVI output fit the picture into the 240 lines of the screen by leaving out every sixth or every sixteenth line. See [Display and tate mode](#display-and-tate-mode).
+
 For wiring and assembly instructions, see the setup sections of the [pico-infonesPlus README](https://github.com/PicoPlus-devel/pico-infonesPlus#setup). To flash a board, hold BOOTSEL while connecting it over USB, then copy the `.uf2` file onto the USB drive that appears.
 
 Audio is sent over HDMI. Boards with an I2S DAC (configurations 8, 13 and 14) can use it instead through the *External Audio* setting; on the Fruit Jam, plugging in headphones selects it automatically. Configuration 15 also plays the sound on its PWM audio jack.
@@ -305,7 +307,7 @@ Audio is sent over HDMI. Boards with an I2S DAC (configurations 8, 13 and 14) ca
 
 In the game menu, **up** and **down** select a game, **left** and **right** move three games at a time, and **A** or **START** starts it. After quitting a game, the menu shows the game that was just played.
 
-**Attract mode.** When nothing is pressed for 20 seconds, a game is chosen, as in Galagino. The games follow a shuffled order: each game is shown once before the order is shuffled again. The menu runs on like a reel, slows down and stops at that game, whose logo blinks before the game starts. The game runs its own demonstration for three minutes; then the menu returns and chooses another game the same way, so a board left alone shows one game after another. Pressing any button stops this: in a game, the game goes on as a normal game; in the menu, the selection stays where the reel stopped. Attract mode starts again the next time the game menu is shown.
+**Attract mode.** After 20 seconds without input, the menu runs on like a reel and starts a game, as in Galagino. The game runs its demonstration for three minutes; then the menu chooses the next one. Every game is shown once, in shuffled order, before any game comes back. Any button stops attract mode; it starts again the next time the game menu is shown.
 
 In a game:
 
