@@ -103,6 +103,7 @@ static State state = State::NoGames;
 
 static bool sdOk = false;
 static gal_games_t installed = 0; // the games that can be played
+static int lastGame = -1;         // the game started last: the menu selects it
 static bool showSettings = false;
 static uint32_t fps = 0;
 static uint64_t lastFrameUs = 0;
@@ -659,12 +660,13 @@ static void enterMenu()
         drawNoGamesScreen();
         return;
     }
-    gal_menu_init(installed);
+    gal_menu_init(installed, lastGame);
     state = State::Menu;
 }
 
 static void startGame(int game)
 {
+    lastGame = game;
     if (gal_needs_copy((gal_game_id_t)game) && gal_flash_room((gal_game_id_t)game) && sdOk)
         copyAndRestart(game);
     char dir[48];
@@ -1020,13 +1022,15 @@ static bool selectUsedAsModifier = false;
 static uint32_t prevButtons = 0;
 static int coinFrames = 0;
 
-// Forget the buttons seen before the settings menu opened: its SELECT+START
-// never reaches mapInputs(), so the SELECT release afterwards would otherwise
-// insert a coin.
+// Around the settings menu: its SELECT+START never reaches mapInputs(), and it
+// returns with buttons still held (SELECT+START again, which quits the game,
+// or the A that chose an option). Those count as seen and SELECT as used as a
+// modifier, so releasing them inserts no coin and toggles nothing; a coin would
+// also count as a press in the game menu and switch its attract mode off.
 static void resetInputs()
 {
-    selectUsedAsModifier = false;
-    prevButtons = 0;
+    selectUsedAsModifier = true;
+    prevButtons = ~0u;
     coinFrames = 0;
 }
 
@@ -1075,8 +1079,9 @@ static uint16_t mapInputs(uint32_t buttons, uint32_t pad2)
     if (buttons & B::DOWN)
         in |= GAL_BTN_DOWN;
 
-    // Rapid fire: 4 frames pressed, 4 released.
-    const bool rapidPhase = (frame & 4) != 0;
+    // Rapid fire: 4 frames pressed, 4 released. Only in a game: in the game
+    // menu every pulse would be a new press of fire, which starts a game.
+    const bool rapidPhase = gal_running() < 0 || (frame & 4) != 0;
     if ((buttons & B::X) || ((buttons & B::A) && !(buttons & B::START)))
     {
         if (!settings.flags.rapidFireOnA || rapidPhase)
@@ -1219,7 +1224,9 @@ static void processPerFrame()
     uint32_t pad2 = 0;
     uint32_t buttons = readPads(wii, &pad2);
 
-    if ((buttons & io::GamePadState::Button::SELECT) && (buttons & io::GamePadState::Button::START))
+    // only when pressed, not while still held from the settings menu itself
+    const uint32_t settingsCombo = io::GamePadState::Button::SELECT | io::GamePadState::Button::START;
+    if ((buttons & settingsCombo) == settingsCombo && (prevButtons & settingsCombo) != settingsCombo)
         showSettings = true;
 
     if (showSettings)

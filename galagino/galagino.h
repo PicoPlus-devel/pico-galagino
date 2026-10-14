@@ -311,12 +311,14 @@ uint32_t gal_psram_size(void);
 
 /* --- The game menu ------------------------------------------------------- */
 
-/* Shows Galagino's logo menu with the games in `installed`. Stops the game,
- * if one is running: the menu keeps tables in its arena. */
-void gal_menu_init(gal_games_t installed);
+/* Shows Galagino's logo menu with the games in `installed`, `select` selected
+ * (Galaga if it is not listed, e.g. -1). Stops the game, if one is running: the
+ * menu keeps tables in its arena. */
+void gal_menu_init(gal_games_t installed, int select);
 
 /* One frame of the menu. Returns the game to start, or -1. After 20 seconds
- * without input a random game is started, as in Galagino. */
+ * without input a random game is started, as in Galagino; buttons still held
+ * when the menu is shown hold that off until they are released. */
 int gal_menu_frame(uint16_t buttons);
 
 /* Draws the menu. Only redraws when something changed, unless `force`. */

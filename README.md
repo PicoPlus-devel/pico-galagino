@@ -303,7 +303,7 @@ Audio is sent over HDMI. Boards with an I2S DAC (configurations 8, 13 and 14) ca
 
 ## Controls
 
-In the game menu, **up** and **down** select a game, **left** and **right** move three games at a time, and **A** or **START** starts it. When nothing is pressed for 20 seconds, a game is chosen at random, as in Galagino; any button switches this off until the board restarts.
+In the game menu, **up** and **down** select a game, **left** and **right** move three games at a time, and **A** or **START** starts it. When nothing is pressed for 20 seconds, a game is chosen at random, as in Galagino; pressing any button switches this off until the game menu is shown again. After quitting a game, the menu shows the game that was just played.
 
 In a game:
 

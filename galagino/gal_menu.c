@@ -7,7 +7,8 @@
  * Only the installed games are listed that can run on the board. Up/down
  * selects, left/right moves a page (three logos), fire or start launches.
  * After 20 seconds without input a random game starts (Galagino's "master
- * attract" mode); any input switches that off for good.
+ * attract" mode); a button press switches that off until the menu is shown
+ * again.
  *
  * The menu is drawn straight into the canvas, only when it changed, and like
  * gal_render top to bottom, ahead of the scan-out. In tate a canvas row is a
@@ -219,7 +220,7 @@ static void make_tables(void)
             marks_of(s);
 }
 
-void gal_menu_init(gal_games_t installed)
+void gal_menu_init(gal_games_t installed, int select)
 {
     /* the tables take the game's place in the arena */
     gal_stop();
@@ -229,11 +230,17 @@ void gal_menu_init(gal_games_t installed)
 
     menu.n = 0;
     menu.sel = 0;
+    int selected = 0;
     for (int g = 0; g < GAL_GAME_COUNT; g++)
     {
         if ((installed & GAL_GAME_BIT(g)) && gal_available((gal_game_id_t)g) && logos[g])
         {
-            if (g == GAL_GAME_GALAGA)
+            if (g == select)
+            {
+                menu.sel = menu.n;
+                selected = 1;
+            }
+            else if (g == GAL_GAME_GALAGA && !selected)
                 menu.sel = menu.n; /* Galaga is the default, as in Galagino */
             menu.games[menu.n++] = (uint8_t)g;
         }
@@ -254,8 +261,13 @@ int gal_menu_frame(uint16_t buttons)
     const uint16_t pressed = buttons & ~menu.last_buttons;
     menu.last_buttons = buttons;
 
-    if (buttons)
+    /* A button still held from the game (or from the settings menu, which
+     * returns before the button that chose "Quit game" is released) is no
+     * choice: it holds the random start off, but does not cancel it. */
+    if (pressed)
         menu.attract = 0;
+    else if (buttons)
+        menu.idle_frames = 0;
 
     int sel = menu.sel;
     if (pressed & GAL_BTN_UP)

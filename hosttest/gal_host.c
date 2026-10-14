@@ -27,6 +27,7 @@
  *   --flash-kb N   the size of that flash (default 2048)
  *   --hiscore DIR  high scores: read DIR/<FOLDER>.HI at the start, written
  *                  when the game reports a change and at the end
+ *   --select GAME  menu: the game selected at the start, as after quitting it
  *
  * Every dumped frame is outdir/frame_NNNNN.ppm (320x240, the canvas the board
  * shows; with --tall the 640x480 the HSTX driver sends). A summary line per
@@ -279,7 +280,7 @@ int main(int argc, char **argv)
     const int frames = atoi(argv[3]);
     const int every = atoi(argv[4]);
     const char *outdir = "hosttest/out";
-    int tate = 0, tall = 0, coin_at = -1, start_at = -1, play_at = -1, no_psram = 0;
+    int tate = 0, tall = 0, coin_at = -1, start_at = -1, play_at = -1, no_psram = 0, select = -1;
     const char *flash_path = NULL, *hiscore_dir = NULL;
     int key_at[MAX_KEYS], key_mask[MAX_KEYS], nkeys = 0;
     const char *wav_path = NULL;
@@ -308,6 +309,8 @@ int main(int argc, char **argv)
             FLASH_SIZE = (uint32_t)atoi(argv[++a]) * 1024;
         else if (!strcmp(argv[a], "--hiscore") && a + 1 < argc)
             hiscore_dir = argv[++a];
+        else if (!strcmp(argv[a], "--select") && a + 1 < argc)
+            select = game_by_name(argv[++a]);
         else if (!strcmp(argv[a], "--keys") && a + 1 < argc && nkeys < MAX_KEYS)
         {
             if (sscanf(argv[++a], "%d:%x", &key_at[nkeys], &key_mask[nkeys]) == 2)
@@ -367,7 +370,7 @@ int main(int argc, char **argv)
     }
 
     if (menu_mode)
-        gal_menu_init(installed);
+        gal_menu_init(installed, select);
     else
     {
         snprintf(dir, sizeof(dir), "%s/%s", romroot, gal_games[game].folder);
