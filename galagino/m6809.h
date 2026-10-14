@@ -52,7 +52,13 @@ typedef struct m6809_state_S {
     uint8_t  nmi_armed;     /* NMI armed (requires S to be written first) */
 
     uint8_t  halted;     /* CPU halted (SYNC/CWAI) */
-    uint8_t  spin;       /* this port: a taken branch to itself (see m6809_run) */
+    uint8_t  spin;       /* this port: a taken branch to itself, 2 the poll loop's (see m6809_run) */
+
+    /* this port: a loop that only polls RAM for another CPU, set up by the
+     * machine (see m6809_run): the address after its short branch back and
+     * the cycles of a round; poll_cycles 0 for none. Kept across resets. */
+    uint16_t poll_end;
+    uint8_t  poll_cycles;
 
     /* Optional direct-ROM window for instruction fetches (opcode and
        operand bytes): while PC is inside [rom_base, rom_base+rom_size)

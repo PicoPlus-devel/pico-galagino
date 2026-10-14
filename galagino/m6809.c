@@ -656,8 +656,8 @@ int m6809_step(m6809_state *s, char count) {
             offset = (int16_t)(int8_t)FETCH8(s);
             if (branch_cond(s, op))
             {
+                s->spin = offset == -2 ? 1 : (s->poll_cycles && s->PC == s->poll_end) ? 2 : 0;
                 s->PC += offset;
-                s->spin = offset == -2;
             }
             s->cycles = 3;
             break;
@@ -1093,6 +1093,8 @@ int m6809_step(m6809_state *s, char count) {
 
 void m6809_run(m6809_state *s, int cycles)
 {
+    int polled = 0;     /* the poll loop branched back in this run, */
+    int32_t mark = 0;   /* with these cycles left */
     s->icount += cycles;
     while (s->icount > 0)
     {
@@ -1104,12 +1106,25 @@ void m6809_run(m6809_state *s, int cycles)
         }
         s->icount -= m6809_step(s, 1);
         /* a branch to itself loops until an interrupt, and interrupts arrive
-         * only between runs (m6809_irq and friends): the rest of the run */
-        if (s->spin)
+         * only between runs (m6809_irq and friends): the rest of the run.
+         * The poll loop has gone round once more, a whole round since its
+         * last branch back in this run; the RAM it reads changes only between
+         * runs too, so every further round of this run is the same. Whole
+         * rounds are skipped and the last one run, which keeps the timing
+         * exact. */
+        if (s->spin == 1)
         {
             s->spin = 0;
             if (s->icount > 0)
                 s->icount = 0;
+        }
+        else if (s->spin)
+        {
+            s->spin = 0;
+            if (polled && mark - s->icount == s->poll_cycles && s->icount > s->poll_cycles)
+                s->icount -= (s->icount - 1) / s->poll_cycles * s->poll_cycles;
+            polled = 1;
+            mark = s->icount;
         }
     }
 }

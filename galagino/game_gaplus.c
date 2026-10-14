@@ -40,11 +40,18 @@ typedef struct
     uint8_t set, visible;
 } star_t;
 
+typedef struct
+{
+    uint16_t x, y; /* on the upright picture */
+    uint16_t color;
+} star_px_t;
+
 static struct
 {
     m6809_state *cpu, *sub, *snd;
     uint8_t *rom, *rom_sub, *rom_snd;
     uint16_t *tiles;           /* [512][8] */
+    uint8_t *tile_pens;        /* [512] the pens each character uses */
     const uint32_t *sprites;   /* [384][32] */
     uint16_t *tile_colors;     /* [64][4] */
     uint8_t *tile_mask;        /* [64] */
@@ -52,7 +59,8 @@ static struct
     uint8_t *spr_mask;         /* [64] */
     int8_t *waves;
     star_t *stars;
-    int nstars;
+    star_px_t *lit; /* the stars drawn this frame */
+    int nstars, nlit;
     uint32_t framecount;
     uint8_t main_irq, sub_irq, snd_irq, subs_reset, io_reset;
     uint8_t starfield[4];
@@ -190,6 +198,31 @@ static void stars_advance(void)
             s->y += 224;
         if (s->y >= 224)
             s->y -= 224;
+    }
+}
+
+/* the stars drawn this frame, once for all the bands */
+static void stars_prepare(void)
+{
+    gp.nlit = 0;
+    if (!(gp.starfield[0] & 1))
+        return;
+    for (int i = 0; i < gp.nstars; i++)
+    {
+        const star_t *s = &gp.stars[i];
+        if (!s->visible)
+            continue;
+        /* GalaginoPlus's twinkle of the second set */
+        if (s->set == 1 && gp.starfield[2] != 0x85 && !(i & 1))
+        {
+            const uint32_t v = gp.framecount + (uint32_t)i;
+            if ((v >> (((v >> 3) & 1) ? 1 : 2)) & 1)
+                continue;
+        }
+        star_px_t *p = &gp.lit[gp.nlit++];
+        p->x = (uint16_t)(223 - s->y);
+        p->y = (uint16_t)s->x;
+        p->color = s->color;
     }
 }
 
@@ -367,6 +400,19 @@ static void map_unused(m6809_state *c)
     }
 }
 
+/* The handshake of the main and sub CPUs: each waits for the other to set a
+ * byte of their shared RAM ($10af, DP $10) to its value, LDA <$af; CMPA #n;
+ * BNE, 9 cycles a round, skipped by m6809_run */
+static void poll_loop(m6809_state *c, const uint8_t *rom, uint16_t pc, uint8_t value)
+{
+    const uint8_t *p = rom + (pc - 0xa000);
+    if (p[0] == 0x96 && p[1] == 0xaf && p[2] == 0x81 && p[3] == value && p[4] == 0x26 && p[5] == 0xfa)
+    {
+        c->poll_end = (uint16_t)(pc + 6);
+        c->poll_cycles = 9;
+    }
+}
+
 static int gp_init(uint8_t *const *regions)
 {
     memset(&gp, 0, sizeof(gp));
@@ -378,14 +424,16 @@ static int gp_init(uint8_t *const *regions)
     gp.sub = (m6809_state *)gal_fast_alloc(sizeof(m6809_state));
     gp.snd = (m6809_state *)gal_fast_alloc(sizeof(m6809_state));
     gp.tiles = (uint16_t *)gal_fast_alloc(512 * 8 * 2);
+    gp.tile_pens = (uint8_t *)gal_fast_alloc(512);
     gp.tile_colors = (uint16_t *)gal_fast_alloc(64 * 4 * 2);
     gp.tile_mask = (uint8_t *)gal_fast_alloc(64);
     gp.spr_colors = (uint16_t *)gal_fast_alloc(64 * 8 * 2);
     gp.spr_mask = (uint8_t *)gal_fast_alloc(64);
     gp.waves = (int8_t *)gal_fast_alloc(256);
     gp.stars = (star_t *)gal_fast_alloc(MAX_STARS * sizeof(star_t));
-    if (!gp.rom || !gp.rom_sub || !gp.rom_snd || !gp.cpu || !gp.sub || !gp.snd || !gp.tiles || !gp.tile_colors ||
-        !gp.tile_mask || !gp.spr_colors || !gp.spr_mask || !gp.waves || !gp.stars)
+    gp.lit = (star_px_t *)gal_fast_alloc(MAX_STARS * sizeof(star_px_t));
+    if (!gp.rom || !gp.rom_sub || !gp.rom_snd || !gp.cpu || !gp.sub || !gp.snd || !gp.tiles || !gp.tile_pens ||
+        !gp.tile_colors || !gp.tile_mask || !gp.spr_colors || !gp.spr_mask || !gp.waves || !gp.stars || !gp.lit)
         return 0;
     memcpy(gp.rom, regions[0], 0x6000);
     memcpy(gp.rom_sub, regions[1], 0x6000);
@@ -394,13 +442,21 @@ static int gp_init(uint8_t *const *regions)
     gp.io[1].in = io_in1;
 
     for (int n = 0; n < 512; n++)
+    {
+        uint8_t pens = 0;
         for (int uy = 0; uy < 8; uy++)
         {
             uint16_t row = 0;
             for (int ux = 0; ux < 8; ux++)
-                row |= (uint16_t)(chr_pixel(regions[3], n, uy, 7 - ux) << (2 * ux));
+            {
+                const int pen = chr_pixel(regions[3], n, uy, 7 - ux);
+                row |= (uint16_t)(pen << (2 * ux));
+                pens |= (uint8_t)(1u << pen);
+            }
             gp.tiles[8 * n + uy] = row;
         }
+        gp.tile_pens[n] = pens;
+    }
     if (regions[GAL_MAX_REGIONS])
         gp.sprites = (const uint32_t *)regions[GAL_MAX_REGIONS];
     else
@@ -458,6 +514,7 @@ static int gp_init(uint8_t *const *regions)
         c->rd_page[0xa0 + p] = gp.rom + 256 * p;
     c->read = gp_read;
     c->write = gp_write;
+    poll_loop(c, gp.rom, 0xc14b, 0x11);
 
     m6809_state *s = gp.sub;
     memset(s, 0, sizeof(*s));
@@ -470,6 +527,7 @@ static int gp_init(uint8_t *const *regions)
         s->rd_page[0xa0 + p] = gp.rom_sub + 256 * p;
     s->read = gp_sub_read;
     s->write = gp_sub_write;
+    poll_loop(s, gp.rom_sub, 0xe0e2, 0x22);
 
     m6809_state *d = gp.snd;
     memset(d, 0, sizeof(*d));
@@ -558,6 +616,7 @@ static void gp_prepare_frame(void)
 {
     static const uint8_t gfx_offs[2][2] = {{0, 1}, {2, 3}};
     const uint8_t *s1 = gal.ram + RAM_SPR1, *s2 = gal.ram + RAM_SPR2, *s3 = gal.ram + RAM_SPR3;
+    stars_prepare();
     gal.active_sprites = 0;
     /* MAME's draw_sprites: the later on top */
     for (int offs = 0; offs < 0x80; offs += 2)
@@ -616,7 +675,8 @@ static void draw_tile(const gal_band_t *b, int px, int py, const uint16_t *tile,
 }
 
 /* MAME's tilemap_scan: 36 columns of 28 rows, the outer two on each side
- * (the scores) stored apart */
+ * (the scores) stored apart. Most of the screen is space: tiles of only
+ * transparent pens are skipped, those without any drawn whole. */
 static void draw_tiles(const gal_band_t *b, int category)
 {
     const int c0 = b->y0 >> 3, c1 = (b->y0 + b->h - 1) >> 3;
@@ -632,28 +692,24 @@ static void draw_tiles(const gal_band_t *b, int category)
             if (((attr >> 6) & 1) != category)
                 continue;
             const int code = gal.ram[RAM_VIDEO + idx] + ((attr & 0x80) << 1);
-            draw_tile(b, x, 8 * c, gp.tiles + 8 * code, gp.tile_colors + 4 * (attr & 0x3f), gp.tile_mask[attr & 0x3f]);
+            const uint8_t pens = gp.tile_pens[code], transparent = gp.tile_mask[attr & 0x3f];
+            if (!(pens & ~transparent))
+                continue;
+            if (pens & transparent)
+                draw_tile(b, x, 8 * c, gp.tiles + 8 * code, gp.tile_colors + 4 * (attr & 0x3f), transparent);
+            else
+                gal_draw_tile_opaque(b, x, 8 * c, gp.tiles + 8 * code, gp.tile_colors + 4 * (attr & 0x3f));
         }
 }
 
 static void draw_stars(const gal_band_t *b)
 {
-    if (!(gp.starfield[0] & 1))
-        return;
-    for (int i = 0; i < gp.nstars; i++)
+    for (int i = 0; i < gp.nlit; i++)
     {
-        const star_t *s = &gp.stars[i];
-        const int y = s->x, x = 223 - s->y;
-        if (!s->visible || y < b->y0 || y >= b->y0 + b->h || x < b->x0 || x >= b->x0 + b->w)
-            continue;
-        /* GalaginoPlus's twinkle of the second set */
-        if (s->set == 1 && gp.starfield[2] != 0x85 && !(i & 1))
-        {
-            const uint32_t v = gp.framecount + (uint32_t)i;
-            if ((v >> (((v >> 3) & 1) ? 1 : 2)) & 1)
-                continue;
-        }
-        b->buf[(y - b->y0) * b->w + (x - b->x0)] = s->color;
+        const star_px_t *s = &gp.lit[i];
+        const int y = s->y - b->y0, x = s->x - b->x0;
+        if ((unsigned)y < (unsigned)b->h && (unsigned)x < (unsigned)b->w)
+            b->buf[y * b->w + x] = s->color;
     }
 }
 
@@ -665,6 +721,9 @@ static void gp_render_band(const gal_band_t *b)
     for (int s = 0; s < gal.active_sprites; s++)
     {
         const gal_sprite_t *o = &gal.sprite[s];
+        /* most miss the band: about 90 of them, 36 bands */
+        if (o->y >= b->y0 + b->h || o->y + 16 <= b->y0 || o->x >= b->x0 + b->w || o->x + 16 <= b->x0)
+            continue;
         const int code = o->code | ((o->flags >> 7) << 8);
         gal_draw_4bpp_mask(b, o->x, o->y, 16, gp.sprites + 32 * code, o->flags & 1, (o->flags & 2) != 0,
                            gp.spr_colors + 8 * o->color, gp.spr_mask[o->color]);

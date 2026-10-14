@@ -613,7 +613,9 @@ static inline void gal_draw_4bpp(const gal_band_t *b, int px, int py, int s, con
 }
 
 /* The same, the pens whose bit is set in `transparent` left out (MAME's
- * transmask: Pooyan's sprites, transparent where their lookup gives colour 0) */
+ * transmask: Pooyan's sprites, transparent where their lookup gives colour 0).
+ * A row is read a word (eight pixels) at a time, the part of each word the
+ * band clips left out; with pen 0 transparent, a word of pen 0 is skipped. */
 static inline void gal_draw_4bpp_mask(const gal_band_t *b, int px, int py, int s, const uint32_t *rows, int flipx,
                                       int flipy, const uint16_t *colors, uint16_t transparent)
 {
@@ -628,18 +630,41 @@ static inline void gal_draw_4bpp_mask(const gal_band_t *b, int px, int py, int s
         xe = b->x0 + b->w;
     if (ys >= ye || xs >= xe)
         return;
-    const int wpr = s >> 3;
-    uint16_t *row = b->buf + (ys - b->y0) * b->w - b->x0;
+    const int wpr = s >> 3, c0 = xs - px, c1 = xe - px, skip0 = transparent & 1;
+    uint16_t *row = b->buf + (ys - b->y0) * b->w - b->x0 + px;
     for (int y = ys; y < ye; y++, row += b->w)
     {
         const int r = flipy ? py + s - 1 - y : y - py;
         const uint32_t *w = rows + r * wpr;
-        for (int x = xs; x < xe; x++)
+        /* columns c0 .. c1 - 1 of the element; flipped in x, word i of the
+         * row is the last but i reversed */
+        for (int i = c0 >> 3; i <= (c1 - 1) >> 3; i++)
         {
-            const int c = flipx ? px + s - 1 - x : x - px;
-            const unsigned pen = (w[c >> 3] >> ((c & 7) << 2)) & 15;
-            if (!((transparent >> pen) & 1))
-                row[x] = colors[pen];
+            uint32_t pix = w[flipx ? wpr - 1 - i : i];
+            if (!pix && skip0)
+                continue;
+            if (flipx)
+                pix = gal_rev4(pix);
+            const int k0 = c0 > 8 * i ? c0 - 8 * i : 0, k1 = c1 < 8 * i + 8 ? c1 - 8 * i : 8;
+            uint16_t *d = row + 8 * i;
+            if (k0 == 0 && k1 == 8)
+            {
+#pragma GCC unroll 8
+                for (int k = 0; k < 8; k++, pix >>= 4)
+                {
+                    const unsigned pen = pix & 15;
+                    if (!((transparent >> pen) & 1))
+                        d[k] = colors[pen];
+                }
+                continue;
+            }
+            pix >>= 4 * k0;
+            for (int k = k0; k < k1; k++, pix >>= 4)
+            {
+                const unsigned pen = pix & 15;
+                if (!((transparent >> pen) & 1))
+                    d[k] = colors[pen];
+            }
         }
     }
 }
