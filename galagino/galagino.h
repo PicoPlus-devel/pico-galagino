@@ -317,15 +317,21 @@ uint32_t gal_psram_size(void);
 void gal_menu_init(gal_games_t installed, int select);
 
 /* One frame of the menu. Returns the game to start, or -1. After 20 seconds
- * without input a random game is started, as in Galagino; buttons still held
- * when the menu is shown hold that off until they are released. The menu
- * first runs like a reel to that game, other than the one selected, and blinks
- * its logo; any button stops that, and only stops it. */
+ * without input a game is started by itself, as in Galagino: the next of a
+ * round of all the games, shuffled, each once before a new shuffle. Buttons
+ * still held when the menu is shown hold that off until they are released.
+ * The menu first runs like a reel to that game and blinks its logo; any button
+ * stops that, and only stops it. */
 int gal_menu_frame(uint16_t buttons);
 
-/* Attract mode's random pick at once, without the 20 seconds: after
- * gal_menu_init, for the next game when one has run a while. */
+/* Attract mode's pick at once, without the 20 seconds: after gal_menu_init,
+ * for the next game when one has run a while. */
 void gal_menu_attract_now(void);
+
+/* Attract mode's round outlives gal_menu_init, but not a restart: these give
+ * it as two words, and take them back after the restart. */
+void gal_menu_attract_order(uint32_t *seed, uint32_t *pos);
+void gal_menu_set_attract_order(uint32_t seed, uint32_t pos);
 
 /* Draws the menu. Only redraws when something changed, unless `force`. */
 void gal_menu_render(gal_orient_t orient, uint16_t *fb, int stride, int force);

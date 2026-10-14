@@ -305,7 +305,7 @@ Audio is sent over HDMI. Boards with an I2S DAC (configurations 8, 13 and 14) ca
 
 In the game menu, **up** and **down** select a game, **left** and **right** move three games at a time, and **A** or **START** starts it. After quitting a game, the menu shows the game that was just played.
 
-**Attract mode.** When nothing is pressed for 20 seconds, a game is chosen at random, as in Galagino: the menu runs on like a reel, slows down and stops at that game, whose logo blinks before the game starts. The game runs its own demonstration for three minutes; then the menu returns and chooses another game the same way, so a board left alone shows one game after another. Pressing any button stops this: in a game, the game goes on as a normal game; in the menu, the selection stays where the reel stopped. Attract mode starts again the next time the game menu is shown.
+**Attract mode.** When nothing is pressed for 20 seconds, a game is chosen, as in Galagino. The games follow a shuffled order: each game is shown once before the order is shuffled again. The menu runs on like a reel, slows down and stops at that game, whose logo blinks before the game starts. The game runs its own demonstration for three minutes; then the menu returns and chooses another game the same way, so a board left alone shows one game after another. Pressing any button stops this: in a game, the game goes on as a normal game; in the menu, the selection stays where the reel stopped. Attract mode starts again the next time the game menu is shown.
 
 In a game:
 

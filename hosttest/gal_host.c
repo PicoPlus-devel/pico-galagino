@@ -348,6 +348,10 @@ static uint32_t start_game(int game, const char *romroot, const char *flash_path
                gal_flash_holds((gal_game_id_t)game) ? "copied" : "COPY FAILED", flash_erased / 1024,
                flash_programmed / 1024, flash_errors, (now_s() - t0) * 1000, (unsigned long long)gal_flash_games());
         save_flash(flash_path);
+        /* attract mode's round, as the board keeps it over the restart */
+        uint32_t seed, pos;
+        gal_menu_attract_order(&seed, &pos);
+        gal_menu_set_attract_order(seed, pos);
     }
     double t0 = now_s();
     uint32_t found = gal_start((gal_game_id_t)game, &io, dir);

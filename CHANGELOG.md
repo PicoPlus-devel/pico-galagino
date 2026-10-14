@@ -20,7 +20,7 @@ Arcade games for RP2350 boards with DVI/HDMI output: Pac-Man, Galaga, Donkey Kon
 - On boards without PSRAM, the large games (1942, Bomb Jack, Pinball Action, Star Force, Donkey Kong 3, BurgerTime, Bump 'n' Jump, Tutankham, Roc'n Rope, Circus Charlie, The Tower of Druaga, Gaplus, Gyruss, Xevious) are copied into flash the first time they are started instead of at every start-up with new ROM sets: the board shows a notice, restarts once and starts the game, which takes a few seconds. The other games are read from the SD card when they start.
 - In the game menu, left and right move three games at a time.
 - After quitting a game, the game menu shows the game just played instead of going back to Galaga.
-- Attract mode: when the game menu chooses a game at random, it now runs on like a reel to that game and blinks its logo before starting it. After three minutes the menu chooses the next game, so a board left alone shows one game after another. Any button stops this.
+- Attract mode: when the game menu chooses a game at random, it now runs on like a reel to that game and blinks its logo before starting it. After three minutes the menu chooses the next game, so a board left alone shows one game after another. Every game is shown once, in random order, before any game comes back. Any button stops this.
 - Fixed: after quitting a game, the game menu no longer started a random game after 20 seconds without input.
 - Fixed: with *Tate mode* on, the game menu showed a diagonal tear while it scrolled.
 - pico-bootLoader's updateAll now installs the ROM sets of all these games. The board no longer creates the game folders.

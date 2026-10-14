@@ -467,11 +467,13 @@ static const gal_io_t romIo = {nullptr, ffListDir, ffOpen, ffSize, ffReadAt, ffC
 // chip; CMakeLists.txt sets PICO_FLASH_SIZE_BYTES to 16 MB so that the SDK's
 // flash functions accept every offset of a larger chip.
 //
-// scratch[0..1]: picoGalagino's own (the SDK uses 4..7 to reboot, pico_shared
+// scratch[0..3]: picoGalagino's own (the SDK uses 4..7 to reboot, pico_shared
 // 6 and 7 for pico-bootLoader). scratch[1] holds the game, and whether attract
-// mode started it, so that attract mode carries on after the copy. They survive
-// the watchdog restart, also when pico-bootLoader resumes the application, and
-// are cleared by a power cycle.
+// mode started it, so that attract mode carries on after the copy; scratch[2]
+// and [3] where attract mode stands in its round of the games (the seed of the
+// shuffle and the position, gal_menu_attract_order()). They survive the
+// watchdog restart, also when pico-bootLoader resumes the application, and are
+// cleared by a power cycle.
 //
 // The restart is made with watchdog_enable(): pico-bootLoader resumes the
 // application only after that (watchdog_enable_caused_reboot()), and shows its
@@ -493,6 +495,7 @@ static int takePendingCopy(bool *attract)
         return -1;
     const uint32_t game = watchdog_hw->scratch[1] & ~PENDING_ATTRACT;
     *attract = (watchdog_hw->scratch[1] & PENDING_ATTRACT) != 0;
+    gal_menu_set_attract_order(watchdog_hw->scratch[2], watchdog_hw->scratch[3]);
     watchdog_hw->scratch[0] = 0;
     return game < GAL_GAME_COUNT ? (int)game : -1;
 }
@@ -576,6 +579,10 @@ static void __attribute__((noreturn)) copyAndRestart(int game, bool attract)
     drawCopyScreen(game);
     sleep_ms(1500); // long enough to read
     watchdog_hw->scratch[1] = (uint32_t)game | (attract ? PENDING_ATTRACT : 0);
+    uint32_t seed, pos;
+    gal_menu_attract_order(&seed, &pos);
+    watchdog_hw->scratch[2] = seed;
+    watchdog_hw->scratch[3] = pos;
     watchdog_hw->scratch[0] = PENDING_COPY_MAGIC;
     // watchdog_enable(), not watchdog_reboot(0,0,0), for pico-bootLoader
     watchdog_enable(1, false);

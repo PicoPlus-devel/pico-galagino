@@ -6,9 +6,10 @@
  *
  * Only the installed games are listed that can run on the board. Up/down
  * selects, left/right moves a page (three logos), fire or start launches.
- * After 20 seconds without input a random game starts (Galagino's "master
+ * After 20 seconds without input a game starts by itself (Galagino's "master
  * attract" mode); a button press switches that off until the menu is shown
- * again. The pick is shown: the column runs on like a reel, the logo in its
+ * again. The games come in rounds: all of them shuffled, each once, then a new
+ * shuffle. The pick is shown: the column runs on like a reel, the logo in its
  * middle in colour, slows down and stops on the game, whose logo blinks before
  * it starts. gal_menu_attract_now() does the same at once, for the next game
  * of an attract mode that has been running a while.
@@ -280,19 +281,97 @@ void gal_menu_init(gal_games_t installed, int select)
     menu.blink_off = 0;
 }
 
-/* Attract mode picks a game: a random one other than the selected one, which
- * the reel runs to. */
+/* Attract mode's round: every game id shuffled, walked in order, the ids the
+ * menu does not list skipped; at the end a new shuffle. It outlives
+ * gal_menu_init. The order follows from the seed alone, so that the seed and
+ * the position carry a round over a restart (gal_menu_set_attract_order). */
+static struct
+{
+    uint32_t seed;
+    int pos; /* the next entry; GAL_GAME_COUNT: a new round is due */
+    uint8_t order[GAL_GAME_COUNT];
+} deck = {.pos = GAL_GAME_COUNT};
+
+static void deck_shuffle(void)
+{
+    uint32_t s = deck.seed;
+    for (int g = 0; g < GAL_GAME_COUNT; g++)
+        deck.order[g] = (uint8_t)g;
+    for (int i = GAL_GAME_COUNT - 1; i > 0; i--)
+    {
+        s = s * 1664525u + 1013904223u; /* an LCG, its high bits */
+        const int j = (int)((s >> 16) % (uint32_t)(i + 1));
+        const uint8_t t = deck.order[i];
+        deck.order[i] = deck.order[j];
+        deck.order[j] = t;
+    }
+}
+
+/* Game g as an index into games, or -1 */
+static int index_of(int g)
+{
+    for (int i = 0; i < menu.n; i++)
+        if (menu.games[i] == g)
+            return i;
+    return -1;
+}
+
+/* The first game of the round from entry pos on, as an index into games */
+static int deck_find(int *pos)
+{
+    while (*pos < GAL_GAME_COUNT)
+    {
+        const int i = index_of(deck.order[(*pos)++]);
+        if (i >= 0)
+            return i;
+    }
+    return -1;
+}
+
+/* The next game of the round, as an index into games (menu.n > 0). A round
+ * does not start with the selected game, the one just shown; the seed is drawn
+ * again rather than the order changed, so that the seed still gives the order. */
+static int deck_next(void)
+{
+    if (deck.pos < GAL_GAME_COUNT)
+    {
+        const int i = deck_find(&deck.pos);
+        if (i >= 0)
+            return i;
+    }
+    int first;
+    do
+    {
+        /* rand() is seeded from the hardware RNG by Frens::initAll() */
+        deck.seed = (uint32_t)rand();
+        deck_shuffle();
+        deck.pos = 0;
+        int p = 0;
+        first = deck_find(&p);
+    } while (menu.n > 1 && first == menu.sel);
+    return deck_find(&deck.pos);
+}
+
+void gal_menu_attract_order(uint32_t *seed, uint32_t *pos)
+{
+    *seed = deck.seed;
+    *pos = (uint32_t)deck.pos;
+}
+
+void gal_menu_set_attract_order(uint32_t seed, uint32_t pos)
+{
+    deck.seed = seed;
+    deck_shuffle();
+    deck.pos = pos < GAL_GAME_COUNT ? (int)pos : GAL_GAME_COUNT;
+}
+
+/* Attract mode picks a game, the next of its round, which the reel runs to.
+ * That is not the selected game, unless someone just played it. */
 static void reel_start(void)
 {
     menu.attract = 0;
     menu.reel_frames = 0;
-    int t = menu.sel;
-    if (menu.n > 1)
-    {
-        t = rand() % (menu.n - 1);
-        if (t >= menu.sel)
-            t++;
-    }
+    const int t = deck_next();
     menu.reel_target = t;
     if (menu.n == 1)
     {
@@ -455,12 +534,7 @@ int gal_menu_frame(uint16_t buttons)
         return menu.games[menu.sel];
 
     if (menu.attract && ++menu.idle_frames >= ATTRACT_FRAMES)
-    {
-        /* rand() is seeded from the hardware RNG by Frens::initAll(); a fixed
-         * seed stepped once a frame always lands on the same game after the
-         * same 20 idle seconds */
-        reel_start();
-    }
+        reel_start(); /* the next game of attract mode's round */
     return -1;
 }
 
