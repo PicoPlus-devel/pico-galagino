@@ -28,6 +28,15 @@
  *   --hiscore DIR  high scores: read DIR/<FOLDER>.HI at the start, written
  *                  when the game reports a change and at the end
  *   --select GAME  menu: the game selected at the start, as after quitting it
+ *   --attract-now  menu: attract mode's pick at once, as when an attract game
+ *                  has run its time (otherwise after 20 seconds, frame 1200)
+ *   --seed N       srand(N) for that pick (the board seeds from its RNG)
+ *   --rotate N     menu: attract mode as on the board. The game the menu picks
+ *                  is started and, while no button is pressed, runs N seconds;
+ *                  then the menu returns and picks the next one
+ *                  (GALAGINO_ATTRACT_SECONDS)
+ *   --video FILE   every frame, as raw RGB24 (320x240, with --tall 640x480),
+ *                  for ffmpeg -f rawvideo -pix_fmt rgb24 -s WxH -r 60 -i FILE
  *
  * Every dumped frame is outdir/frame_NNNNN.ppm (320x240, the canvas the board
  * shows; with --tall the 640x480 the HSTX driver sends). A summary line per
@@ -171,12 +180,9 @@ static void hiscore_save(const char *dir, int game, const uint8_t *data)
 
 /* --- output helpers ------------------------------------------------------ */
 
-static void write_ppm(const char *path, const uint16_t *fb)
+/* The 320x240 RGB565 canvas as RGB24 */
+static void put_rgb(FILE *f, const uint16_t *fb)
 {
-    FILE *f = fopen(path, "wb");
-    if (!f)
-        return;
-    fprintf(f, "P6\n320 240\n255\n");
     for (int i = 0; i < 320 * 240; i++)
     {
         uint16_t p = fb[i];
@@ -184,17 +190,22 @@ static void write_ppm(const char *path, const uint16_t *fb)
                           (uint8_t)((p & 0x1f) * 255 / 31)};
         fwrite(rgb, 1, 3, f);
     }
+}
+
+static void write_ppm(const char *path, const uint16_t *fb)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f)
+        return;
+    fprintf(f, "P6\n320 240\n255\n");
+    put_rgb(f, fb);
     fclose(f);
 }
 
 /* --tall: a TALL_W x rows RGB555 canvas as the HSTX driver sends it, 640x480:
  * the rows scaled to the lines, the pixels doubled between black borders. */
-static void write_ppm_tall(const char *path, const uint16_t *fb, int rows)
+static void put_rgb_tall(FILE *f, const uint16_t *fb, int rows)
 {
-    FILE *f = fopen(path, "wb");
-    if (!f)
-        return;
-    fprintf(f, "P6\n640 480\n255\n");
     const int pairs = TALL_W / 2, border = (640 - 2 * TALL_W) / 2;
     for (uint32_t line = 0; line < 480; line++)
     {
@@ -216,6 +227,15 @@ static void write_ppm_tall(const char *path, const uint16_t *fb, int rows)
             fwrite(rgb, 1, 3, f);
         }
     }
+}
+
+static void write_ppm_tall(const char *path, const uint16_t *fb, int rows)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f)
+        return;
+    fprintf(f, "P6\n640 480\n255\n");
+    put_rgb_tall(f, fb, rows);
     fclose(f);
 }
 
@@ -255,6 +275,32 @@ static double now_s(void)
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
+/* Starts a game as the board does: a large game that is not in the flash cache
+ * is copied into it first (the board restarts for that). Returns the files
+ * found; gal_running() tells whether it started. */
+static uint32_t start_game(int game, const char *romroot, const char *flash_path)
+{
+    char dir[1024];
+    snprintf(dir, sizeof(dir), "%s/%s", romroot, gal_games[game].folder);
+    if (gal_needs_copy((gal_game_id_t)game) && gal_flash_room((gal_game_id_t)game))
+    {
+        /* the board restarts and copies the set before its display starts */
+        double t0 = now_s();
+        flash_erased = flash_programmed = 0;
+        gal_flash_copy((gal_game_id_t)game, &io, dir);
+        printf("flash cache: %s, %u KB erased, %u KB programmed, %d errors, %.0f ms, holds %llx\n",
+               gal_flash_holds((gal_game_id_t)game) ? "copied" : "COPY FAILED", flash_erased / 1024,
+               flash_programmed / 1024, flash_errors, (now_s() - t0) * 1000, (unsigned long long)gal_flash_games());
+        save_flash(flash_path);
+    }
+    double t0 = now_s();
+    uint32_t found = gal_start((gal_game_id_t)game, &io, dir);
+    printf("%s: start %s in %.1f ms, arena %u of %u bytes, PSRAM %u of %u bytes\n", gal_games[game].title,
+           gal_running() == game ? "ok" : "FAILED", (now_s() - t0) * 1000, gal_arena_peak(), gal_arena_size(),
+           gal_psram_peak(), gal_psram_size());
+    return found;
+}
+
 static int game_by_name(const char *s)
 {
     for (int g = 0; g < GAL_GAME_COUNT; g++)
@@ -281,6 +327,8 @@ int main(int argc, char **argv)
     const int every = atoi(argv[4]);
     const char *outdir = "hosttest/out";
     int tate = 0, tall = 0, coin_at = -1, start_at = -1, play_at = -1, no_psram = 0, select = -1;
+    int attract_now = 0, rotate = 0;
+    const char *video_path = NULL;
     const char *flash_path = NULL, *hiscore_dir = NULL;
     int key_at[MAX_KEYS], key_mask[MAX_KEYS], nkeys = 0;
     const char *wav_path = NULL;
@@ -311,6 +359,14 @@ int main(int argc, char **argv)
             hiscore_dir = argv[++a];
         else if (!strcmp(argv[a], "--select") && a + 1 < argc)
             select = game_by_name(argv[++a]);
+        else if (!strcmp(argv[a], "--attract-now"))
+            attract_now = 1;
+        else if (!strcmp(argv[a], "--rotate") && a + 1 < argc)
+            rotate = atoi(argv[++a]);
+        else if (!strcmp(argv[a], "--video") && a + 1 < argc)
+            video_path = argv[++a];
+        else if (!strcmp(argv[a], "--seed") && a + 1 < argc)
+            srand((unsigned)atoi(argv[++a]));
         else if (!strcmp(argv[a], "--keys") && a + 1 < argc && nkeys < MAX_KEYS)
         {
             if (sscanf(argv[++a], "%d:%x", &key_at[nkeys], &key_mask[nkeys]) == 2)
@@ -370,27 +426,14 @@ int main(int argc, char **argv)
     }
 
     if (menu_mode)
+    {
         gal_menu_init(installed, select);
+        if (attract_now)
+            gal_menu_attract_now();
+    }
     else
     {
-        snprintf(dir, sizeof(dir), "%s/%s", romroot, gal_games[game].folder);
-        if (gal_needs_copy((gal_game_id_t)game) && gal_flash_room((gal_game_id_t)game))
-        {
-            /* the board restarts and copies the set before its display starts */
-            double t0 = now_s();
-            flash_erased = flash_programmed = 0;
-            gal_flash_copy((gal_game_id_t)game, &io, dir);
-            printf("flash cache: %s, %u KB erased, %u KB programmed, %d errors, %.0f ms, holds %llx\n",
-                   gal_flash_holds((gal_game_id_t)game) ? "copied" : "COPY FAILED", flash_erased / 1024,
-                   flash_programmed / 1024, flash_errors, (now_s() - t0) * 1000,
-                   (unsigned long long)gal_flash_games());
-            save_flash(flash_path);
-        }
-        double t0 = now_s();
-        uint32_t found = gal_start((gal_game_id_t)game, &io, dir);
-        printf("%s: start %s in %.1f ms, arena %u of %u bytes, PSRAM %u of %u bytes\n", gal_games[game].title,
-               gal_running() == game ? "ok" : "FAILED", (now_s() - t0) * 1000, gal_arena_peak(), gal_arena_size(),
-               gal_psram_peak(), gal_psram_size());
+        uint32_t found = start_game(game, romroot, flash_path);
         if (gal_running() != game)
         {
             for (int i = 0; i < gal_games[game].nfiles; i++)
@@ -425,6 +468,7 @@ int main(int argc, char **argv)
         if (wav)
             wav_header(wav, 0);
     }
+    FILE *video = video_path ? fopen(video_path, "wb") : NULL;
 
     static uint16_t fb[320 * 240];
     int16_t audio[SAMPLES_PER_FRAME];
@@ -435,8 +479,11 @@ int main(int argc, char **argv)
     const gal_orient_t orient = tall ? GAL_ORIENT_UPRIGHT_FULL : (gal_orient_t)tate;
     const int stride = tall ? TALL_W : 320;
     gal_render_borders(orient, fb, stride);
+    /* --rotate: the game the menu started, and whether attract mode did */
+    int in_game = -1, attract = 0, game_frames = 0;
     for (int f = 0; f < frames; f++)
     {
+        int repaint = 0;
         uint16_t in = 0;
         if (coin_at >= 0 && f >= coin_at && f < coin_at + 4)
             in |= GAL_BTN_COIN;
@@ -455,23 +502,56 @@ int main(int argc, char **argv)
         }
 
         double t0 = now_s();
-        if (menu_mode)
+        if (in_game >= 0 && in)
+            attract = 0; /* a player took over */
+        if (menu_mode && in_game < 0)
         {
             int g = gal_menu_frame(in);
             if (g >= 0)
+            {
                 printf("frame %d: menu starts %s\n", f, gal_games[g].title);
+                if (rotate > 0)
+                {
+                    start_game(g, romroot, flash_path);
+                    attract = !in;
+                    game_frames = 0;
+                    if (gal_running() == g)
+                        in_game = g;
+                    else
+                    {
+                        gal_menu_init(installed, g);
+                        gal_menu_attract_now();
+                    }
+                    repaint = 1;
+                }
+            }
+            memset(audio, 0, sizeof(audio));
+        }
+        else if (in_game >= 0 && attract && ++game_frames > rotate * 60)
+        {
+            printf("frame %d: attract mode: next game\n", f);
+            gal_menu_init(installed, in_game);
+            gal_menu_attract_now();
+            in_game = -1;
+            repaint = 1;
             memset(audio, 0, sizeof(audio));
         }
         else
         {
             gal_run_frame(in, audio, SAMPLES_PER_FRAME);
             uint8_t table[GAL_HISCORE_MAX];
-            if (hiscore_dir && gal_hiscore_poll(table))
+            if (!menu_mode && hiscore_dir && gal_hiscore_poll(table))
                 hiscore_save(hiscore_dir, game, table);
         }
         double t1 = now_s();
-        if (menu_mode)
-            gal_menu_render(orient, fb, stride, f == 0);
+        if (repaint)
+        {
+            /* the canvas changes height with --tall, as on the board */
+            memset(fb, 0, sizeof(fb));
+            gal_render_borders(orient, fb, stride);
+        }
+        if (menu_mode && in_game < 0)
+            gal_menu_render(orient, fb, stride, f == 0 || repaint);
         else
             gal_render(orient, fb, stride);
         double t2 = now_s();
@@ -494,6 +574,13 @@ int main(int argc, char **argv)
             total_samples += SAMPLES_PER_FRAME;
         }
 
+        if (video)
+        {
+            if (tall)
+                put_rgb_tall(video, fb, gal_view_height());
+            else
+                put_rgb(video, fb);
+        }
         if (every > 0 && (f % every) == 0)
         {
             char path[1100];
@@ -517,6 +604,8 @@ int main(int argc, char **argv)
         wav_header(wav, total_samples);
         fclose(wav);
     }
+    if (video)
+        fclose(video);
     uint8_t table[GAL_HISCORE_MAX];
     if (!menu_mode && hiscore_dir && gal_hiscore_flush(table))
         hiscore_save(hiscore_dir, game, table);

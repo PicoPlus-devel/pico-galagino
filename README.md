@@ -270,7 +270,7 @@ The game menu lists the games whose sets are complete. When no set is found, the
 
 Like Galagino, the emulator converts the graphics, colour and sound PROMs into its own formats; it does so on the board when a game starts, which takes a fraction of a second. Clones and bootlegs other than the sets listed are not supported.
 
-**Large games run from PSRAM, or from flash.** A game is read from the card each time it starts. The data of a large game (1942, Bomb Jack, Pinball Action, Star Force, Donkey Kong 3, BurgerTime, Bump 'n' Jump, Tutankham, Roc'n Rope, Circus Charlie, The Tower of Druaga, Gaplus, Gyruss, Xevious) does not fit in the internal SRAM: on boards with PSRAM it is kept there; boards without PSRAM keep it in their flash memory instead. The board copies such a set into flash the first time the game is started: it shows a notice, restarts, copies the set with a dark screen and a blinking LED, which takes a few seconds, and starts the game. Later starts use the copy, also without the SD card. When the flash is full, the copy made longest ago makes room. The flash used is everything after the program, as large as the flash chip itself reports, not only the size the board type usually carries.
+**Large games run from PSRAM, or from flash.** A game is read from the card each time it starts. The data of a large game (1942, Bomb Jack, Pinball Action, Star Force, Donkey Kong 3, BurgerTime, Bump 'n' Jump, Tutankham, Roc'n Rope, Circus Charlie, The Tower of Druaga, Gaplus, Gyruss, Xevious) does not fit in the internal SRAM: on boards with PSRAM it is kept there; boards without PSRAM keep it in their flash memory instead. The board copies such a set into flash the first time the game is started: it shows a notice, restarts, copies the set with a dark screen and a blinking LED, which takes a few seconds, and starts the game. Later starts use the copy, also without the SD card. Attract mode does the same when it chooses such a game, and carries on after the restart. Under pico-bootLoader, the board returns to picoGalagino after the restart. When the flash is full, the copy made longest ago makes room. The flash used is everything after the program, as large as the flash chip itself reports, not only the size the board type usually carries.
 
 ***
 
@@ -303,7 +303,9 @@ Audio is sent over HDMI. Boards with an I2S DAC (configurations 8, 13 and 14) ca
 
 ## Controls
 
-In the game menu, **up** and **down** select a game, **left** and **right** move three games at a time, and **A** or **START** starts it. When nothing is pressed for 20 seconds, a game is chosen at random, as in Galagino; pressing any button switches this off until the game menu is shown again. After quitting a game, the menu shows the game that was just played.
+In the game menu, **up** and **down** select a game, **left** and **right** move three games at a time, and **A** or **START** starts it. After quitting a game, the menu shows the game that was just played.
+
+**Attract mode.** When nothing is pressed for 20 seconds, a game is chosen at random, as in Galagino: the menu runs on like a reel, slows down and stops at that game, whose logo blinks before the game starts. The game runs its own demonstration for three minutes; then the menu returns and chooses another game the same way, so a board left alone shows one game after another. Pressing any button stops this: in a game, the game goes on as a normal game; in the menu, the selection stays where the reel stopped. Attract mode starts again the next time the game menu is shown.
 
 In a game:
 
@@ -384,6 +386,8 @@ cd pico-galagino
 
 Every configuration must be built with `-2` (RP2350).
 
+`EXTRA_CMAKE_ARGS=-DGALAGINO_ATTRACT_SECONDS=N` sets how long a game started by attract mode runs before the next one is chosen (default 180; 0 lets it run until a button is pressed, as in Galagino).
+
 Two build options help to measure the speed of a game on the board:
 
 - `EXTRA_CMAKE_ARGS=-DGALAGINO_FRAME_STATS=1 ./bld.sh -c 8 -2` prints over the serial console, every five seconds, the time spent emulating and drawing a frame, the time left before the display needs the next frame, the number of frames that came too late, and the time of each CPU of the games that count it. The frame rate display on the screen shows the length of a single frame, so it varies by a few frames per second even when no frame is late.
@@ -413,7 +417,7 @@ hosttest/conv_check.py ~/roms/arcade path/to/galagino /tmp/conv_check
 ./hosttest/flash_test
 ```
 
-- `gal_host` takes the folder that holds the game folders, as on the SD card, and a game (its folder name) or `menu`. It loads the set through the same loader as the firmware, runs the given number of frames with scripted input, writes every Nth frame as a 320 x 240 PPM in the chosen orientation (`--tate 0|1|2`) and the sound as a WAV file. `--tall` writes instead the 640 x 480 picture that a board with HSTX video output shows with *Tate mode* off. `--no-psram` runs it as a board without PSRAM, and `--flash FILE` (with `--flash-kb N` for its size) with a flash cache, kept in FILE between runs, which a large game is copied into first, as the board does. `--hiscore DIR` reads and writes the high score files in DIR.
+- `gal_host` takes the folder that holds the game folders, as on the SD card, and a game (its folder name) or `menu`. It loads the set through the same loader as the firmware, runs the given number of frames with scripted input, writes every Nth frame as a 320 x 240 PPM in the chosen orientation (`--tate 0|1|2`) and the sound as a WAV file. `--tall` writes instead the 640 x 480 picture that a board with HSTX video output shows with *Tate mode* off. `--no-psram` runs it as a board without PSRAM, and `--flash FILE` (with `--flash-kb N` for its size) with a flash cache, kept in FILE between runs, which a large game is copied into first, as the board does. `--hiscore DIR` reads and writes the high score files in DIR. In the menu, `--select GAME` selects a game at the start, `--attract-now` makes attract mode choose a game at once instead of after 20 seconds, and `--rotate N` runs attract mode as the board does, with N seconds per game; `--seed N` fixes the random choice. `--video FILE` writes every frame as raw RGB24, which ffmpeg can turn into a video, for example `ffmpeg -f rawvideo -pix_fmt rgb24 -s 640x480 -r 60 -i FILE -i game.wav out.mp4` with `--tall`.
 - `flash_test` checks the flash cache on its own with made-up games: where slots go, which copy makes room, finding them again after a restart, and damaged, half-written and outdated slots.
 - `conv_check.py` runs the converters of a Galagino checkout (`romconv/`) on the same ROM sets and compares every table they write with the one the emulator builds on the board.
 - `zex_host` runs the ZEXDOC and ZEXALL instruction exercisers on the Z80 core; the test programs are not part of this repository.

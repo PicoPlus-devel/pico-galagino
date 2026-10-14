@@ -179,6 +179,13 @@ if(GALAGINO_FLASH_CACHE_TEST)
     target_compile_definitions(${projectname} PRIVATE GALAGINO_FLASH_CACHE_TEST=1)
 endif()
 
+# EXTRA_CMAKE_ARGS=-DGALAGINO_ATTRACT_SECONDS=20 ./bld.sh ... sets how long a
+# game started by attract mode runs before the menu picks the next one (default
+# 180; 0: it runs on). A short time is for testing that on a board.
+if(DEFINED GALAGINO_ATTRACT_SECONDS)
+    target_compile_definitions(${projectname} PRIVATE GALAGINO_ATTRACT_SECONDS=${GALAGINO_ATTRACT_SECONDS})
+endif()
+
 pico_set_program_name(${projectname} "${projectname}")
 pico_set_program_version(${projectname} "0.1")
 

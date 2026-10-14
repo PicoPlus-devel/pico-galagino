@@ -74,6 +74,16 @@
 #define GALAGINO_FLASH_CACHE_TEST 0
 #endif
 
+// Attract mode: a game the game menu started by itself, after 20 seconds
+// without input, runs this long while nobody presses a button. Then the menu
+// returns and picks another game. 0: it runs on, as in Galagino.
+#ifndef GALAGINO_ATTRACT_SECONDS
+#define GALAGINO_ATTRACT_SECONDS 180
+#endif
+// A game attract mode picked that could not be started: its screen is shown
+// this long, then the menu picks another.
+#define ATTRACT_FAILED_FRAMES (10 * 60)
+
 // Output gains in Q8 (256 = unity). Galagino's levels peak at about 0.4 (Pac-
 // Man) to 0.6 (Dig Dug) of full scale, which suits HDMI. The I2S DAC drives
 // the amplifier or headphones directly, with no volume stage after it, and was
@@ -104,6 +114,8 @@ static State state = State::NoGames;
 static bool sdOk = false;
 static gal_games_t installed = 0; // the games that can be played
 static int lastGame = -1;         // the game started last: the menu selects it
+static bool attractGame = false;  // it was started by attract mode, no button pressed since
+static uint32_t attractFrames = 0; // the frames it has run
 static bool showSettings = false;
 static uint32_t fps = 0;
 static uint64_t lastFrameUs = 0;
@@ -456,21 +468,40 @@ static const gal_io_t romIo = {nullptr, ffListDir, ffOpen, ffSize, ffReadAt, ffC
 // flash functions accept every offset of a larger chip.
 //
 // scratch[0..1]: picoGalagino's own (the SDK uses 4..7 to reboot, pico_shared
-// 6 and 7 for pico-bootLoader). They survive the watchdog restart, also when
-// pico-bootLoader resumes the application, and are cleared by a power cycle.
+// 6 and 7 for pico-bootLoader). scratch[1] holds the game, and whether attract
+// mode started it, so that attract mode carries on after the copy. They survive
+// the watchdog restart, also when pico-bootLoader resumes the application, and
+// are cleared by a power cycle.
+//
+// The restart is made with watchdog_enable(): pico-bootLoader resumes the
+// application only after that (watchdog_enable_caused_reboot()), and shows its
+// own menu after watchdog_reboot(). initAll() would take the same mark for a
+// ROM picked in pico_shared's browser and flash the ROM that browser picked
+// last, maybe another application's, over the cache; main() clears the mark
+// before initAll() (clearRestartMark()).
 // ---------------------------------------------------------------------------
 static constexpr uint32_t PENDING_COPY_MAGIC = 0x47414c50u; // "GALP"
+static constexpr uint32_t PENDING_ATTRACT = 0x80000000u;    // scratch[1]: started by attract mode
 static int copiedGame = -1;   // the game copied at this boot, to start at once
+static bool copiedAttract = false; // attract mode had started it
 static uint32_t copyFound = 0; // its files found
 static bool cacheOpen = false;
 
-static int takePendingCopy()
+static int takePendingCopy(bool *attract)
 {
     if (watchdog_hw->scratch[0] != PENDING_COPY_MAGIC)
         return -1;
-    const uint32_t game = watchdog_hw->scratch[1];
+    const uint32_t game = watchdog_hw->scratch[1] & ~PENDING_ATTRACT;
+    *attract = (watchdog_hw->scratch[1] & PENDING_ATTRACT) != 0;
     watchdog_hw->scratch[0] = 0;
     return game < GAL_GAME_COUNT ? (int)game : -1;
+}
+
+// Before initAll(): a restart for a copy is not a ROM picked in the browser.
+static void clearRestartMark()
+{
+    if (watchdog_hw->scratch[0] == PENDING_COPY_MAGIC)
+        watchdog_hw->scratch[4] = 0; // the SDK's watchdog_enable() mark
 }
 
 static void flashErase(uint32_t offset, uint32_t len)
@@ -527,7 +558,7 @@ static void openFlashCache()
 static void prepareFlash()
 {
     openFlashCache();
-    const int game = takePendingCopy();
+    const int game = takePendingCopy(&copiedAttract);
     if (game < 0 || !cacheOpen)
         return;
     char dir[48];
@@ -540,15 +571,14 @@ static void prepareFlash()
 }
 
 // Restarts the board to copy the game into flash; see above.
-static void __attribute__((noreturn)) copyAndRestart(int game)
+static void __attribute__((noreturn)) copyAndRestart(int game, bool attract)
 {
     drawCopyScreen(game);
     sleep_ms(1500); // long enough to read
-    watchdog_hw->scratch[1] = (uint32_t)game;
+    watchdog_hw->scratch[1] = (uint32_t)game | (attract ? PENDING_ATTRACT : 0);
     watchdog_hw->scratch[0] = PENDING_COPY_MAGIC;
-    // watchdog_reboot(0,0,0), not watchdog_enable(): pico_shared would take
-    // the latter for a ROM picked in its browser, see menu.cpp.
-    watchdog_reboot(0, 0, 0);
+    // watchdog_enable(), not watchdog_reboot(0,0,0), for pico-bootLoader
+    watchdog_enable(1, false);
     while (true)
         tight_loop_contents();
 }
@@ -664,11 +694,14 @@ static void enterMenu()
     state = State::Menu;
 }
 
-static void startGame(int game)
+// attract: the game menu started it by itself (see GALAGINO_ATTRACT_SECONDS)
+static void startGame(int game, bool attract)
 {
     lastGame = game;
+    attractGame = attract;
+    attractFrames = 0;
     if (gal_needs_copy((gal_game_id_t)game) && gal_flash_room((gal_game_id_t)game) && sdOk)
-        copyAndRestart(game);
+        copyAndRestart(game, attract);
     char dir[48];
     gameDir(game, dir, sizeof(dir));
     printf("Starting %s from %s\n", gal_games[game].title, dir);
@@ -1177,6 +1210,20 @@ static void paceFrame(bool init)
 #endif
 }
 
+// Attract mode, after a game has run its time: back to the game menu, the game
+// just played selected, which runs on to another game at random.
+static void attractNext()
+{
+    printf("Attract mode: next game\n");
+    hiscoreFlush();
+    attractGame = false;
+    enterMenu();
+    if (state == State::Menu)
+        gal_menu_attract_now();
+    bordersValid = false;
+    paceFrame(true);
+}
+
 // ---------------------------------------------------------------------------
 // Once per frame
 // ---------------------------------------------------------------------------
@@ -1232,6 +1279,7 @@ static void processPerFrame()
     if (showSettings)
     {
         showSettings = false;
+        attractGame = false; // someone is at the board
         resetInputs();
         hiscoreFlush(); // the settings menu can restart the board
         g_settings_visibility =
@@ -1299,6 +1347,19 @@ static void processPerFrame()
     {
     case State::Game:
     {
+        if (attractGame)
+        {
+            if (buttons | pad2)
+            {
+                attractGame = false; // a player took over
+                printf("Attract mode off\n");
+            }
+            else if (GALAGINO_ATTRACT_SECONDS > 0 && ++attractFrames >= GALAGINO_ATTRACT_SECONDS * 60u)
+            {
+                attractNext();
+                break;
+            }
+        }
         const uint64_t t0 = Frens::time_us();
         gal_run_frame(in, audioBuf, SAMPLES_PER_FRAME);
 #if GALAGINO_FRAME_STATS
@@ -1318,20 +1379,27 @@ static void processPerFrame()
         const int game = gal_menu_frame(in);
         if (game >= 0)
         {
-            // a start without any button held is the menu's attract timeout
+            // a start without any button held is attract mode's: any button
+            // stops its pick before it is made
             if (!in)
                 printf("Attract mode: %s\n", gal_games[game].title);
-            startGame(game);
+            startGame(game, !in);
             bordersValid = false;
             paceFrame(true);
         }
         break;
     }
     case State::Failed:
+        if (buttons | pad2)
+            attractGame = false;
         if (in & GAL_BTN_START)
         {
             enterMenu();
             bordersValid = false;
+        }
+        else if (attractGame && ++attractFrames >= ATTRACT_FAILED_FRAMES)
+        {
+            attractNext(); // nobody there to press START
         }
         break;
     case State::NoGames:
@@ -1369,10 +1437,12 @@ int main()
     // before the display starts (see "The flash cache").
     char dummyRom[FF_MAX_LFN];
     dummyRom[0] = 0;
+    clearRestartMark();
     Frens::setPreVideoInitTask(prepareFlash);
     sdOk = Frens::initAll(dummyRom, CPUFreqKHz, 0, 0, AUDIOBUFFERSIZE, false, true);
     Frens::setPreVideoInitTask(nullptr);
-    takePendingCopy(); // without a card it was not taken: forget it
+    bool unused;
+    takePendingCopy(&unused); // without a card it was not taken: forget it
 
     if (sdOk)
     {
@@ -1414,16 +1484,19 @@ int main()
     {
         // just copied into flash: started straight away, as it was chosen
         if (gal_flash_holds((gal_game_id_t)copiedGame))
-            startGame(copiedGame);
+            startGame(copiedGame, copiedAttract);
         else
         {
+            lastGame = copiedGame;
+            attractGame = copiedAttract;
+            attractFrames = 0;
             drawFailedScreen(copiedGame, copyFound);
             state = State::Failed;
         }
     }
 #ifdef GALAGINO_AUTOSTART // profiling builds: the game at once (see CMakeLists.txt)
     else if (installed)
-        startGame(GALAGINO_AUTOSTART);
+        startGame(GALAGINO_AUTOSTART, false);
 #endif
     else if (installed)
         enterMenu();

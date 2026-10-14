@@ -8,7 +8,10 @@
  * selects, left/right moves a page (three logos), fire or start launches.
  * After 20 seconds without input a random game starts (Galagino's "master
  * attract" mode); a button press switches that off until the menu is shown
- * again.
+ * again. The pick is shown: the column runs on like a reel, the logo in its
+ * middle in colour, slows down and stops on the game, whose logo blinks before
+ * it starts. gal_menu_attract_now() does the same at once, for the next game
+ * of an attract mode that has been running a while.
  *
  * The menu is drawn straight into the canvas, only when it changed, and like
  * gal_render top to bottom, ahead of the scan-out. In tate a canvas row is a
@@ -72,6 +75,10 @@
 
 #define LOGO_H 96
 #define ATTRACT_FRAMES (20 * 60)
+#define REEL_MIN (8 * LOGO_H) /* the reel runs at least this far: laps with few games */
+#define REEL_FRAMES 120       /* about as long as it runs at full speed */
+#define REEL_TICK 6           /* static layout: frames a logo, before it slows down */
+#define BLINK_FRAMES 72       /* four blinks of 16 frames, then colour */
 #define BANDS (GAL_W / 8) /* a logo row in pieces of eight pixels */
 #define TABLES 4          /* logos in view at most: 288 rows of 96, scrolled */
 
@@ -151,16 +158,33 @@ static struct
     uint16_t last_buttons;
     int idle_frames;
     int attract;            /* the random start is still armed */
+    int reel;               /* attract mode's pick on its way: REEL_SPIN, REEL_BLINK or 0 */
+    int reel_target;        /* the pick, an index into games */
+    int reel_left;          /* still to go: pixels, or logos in the static layout */
+    int reel_frames;
+    int reel_speed;         /* full speed, in pixels a frame */
+    int blink_off;          /* the selected logo shows grey */
     rle_mark_t *marks;      /* TABLES tables of LOGO_H * BANDS, in the game arena */
     int table_slot[TABLES]; /* the index into games each table is for, or -1 */
 } menu;
 
 _Static_assert(TABLES * LOGO_H * BANDS * sizeof(rle_mark_t) <= GAL_ARENA_SIZE, "the logo tables must fit the arena");
 
+enum
+{
+    REEL_SPIN = 1,
+    REEL_BLINK,
+};
+
+/* The scroll position with logo `sel` in the middle of the three on screen */
+static int offset_of(int sel)
+{
+    return (LOGO_H * (sel - 1 + menu.n)) % (menu.n * LOGO_H);
+}
+
 static int target_offset(void)
 {
-    /* the selection in the middle of the three logos on screen */
-    return (LOGO_H * (menu.sel - 1 + menu.n)) % (menu.n * LOGO_H);
+    return offset_of(menu.sel);
 }
 
 /* The logo on row y of the upright picture, as an index into games (-1: none),
@@ -252,6 +276,107 @@ void gal_menu_init(gal_games_t installed, int select)
     menu.last_buttons = 0xffff;
     menu.idle_frames = 0;
     menu.attract = 1;
+    menu.reel = 0;
+    menu.blink_off = 0;
+}
+
+/* Attract mode picks a game: a random one other than the selected one, which
+ * the reel runs to. */
+static void reel_start(void)
+{
+    menu.attract = 0;
+    menu.reel_frames = 0;
+    int t = menu.sel;
+    if (menu.n > 1)
+    {
+        t = rand() % (menu.n - 1);
+        if (t >= menu.sel)
+            t++;
+    }
+    menu.reel_target = t;
+    if (menu.n == 1)
+    {
+        menu.reel = REEL_BLINK;
+        return;
+    }
+    menu.reel = REEL_SPIN;
+    if (menu.n > 3)
+    {
+        /* forward only, as with down, so the logos run up the screen */
+        const int len = menu.n * LOGO_H;
+        menu.reel_left = ((offset_of(t) - menu.offset) % len + len) % len;
+        while (menu.reel_left < REEL_MIN)
+            menu.reel_left += len;
+        /* about as long whatever the distance: up to half a logo a frame,
+         * which takes at most one new logo table a frame */
+        const int speed = menu.reel_left / REEL_FRAMES;
+        menu.reel_speed = speed < 12 ? 12 : speed > LOGO_H / 2 ? LOGO_H / 2 : speed;
+    }
+    else
+    {
+        menu.reel_left = (t - menu.sel + menu.n) % menu.n;
+        while (menu.reel_left < 6)
+            menu.reel_left += menu.n;
+    }
+}
+
+void gal_menu_attract_now(void)
+{
+    if (menu.n)
+        reel_start();
+}
+
+/* A frame of the reel. Returns the game to start, or -1. */
+static int reel_frame(void)
+{
+    if (menu.reel == REEL_BLINK)
+    {
+        const int off = (++menu.reel_frames / 8) & 1;
+        if (off != menu.blink_off)
+        {
+            menu.blink_off = off;
+            menu.dirty = 1;
+        }
+        if (menu.reel_frames < BLINK_FRAMES)
+            return -1;
+        menu.reel = 0;
+        menu.blink_off = 0;
+        return menu.games[menu.sel];
+    }
+
+    if (menu.n > 3)
+    {
+        /* full speed, then slowing down over the last logos; the logo in the
+         * middle of the screen is the selection */
+        int step = menu.reel_left / 8;
+        step = step > menu.reel_speed ? menu.reel_speed : step < 2 ? 2 : step;
+        if (step > menu.reel_left)
+            step = menu.reel_left;
+        menu.offset = (menu.offset + step) % (menu.n * LOGO_H);
+        menu.reel_left -= step;
+        int ly;
+        menu.sel = row_at(GAL_H / 2, &ly);
+        make_tables();
+        menu.dirty = 1;
+    }
+    else
+    {
+        /* the colour moves down a logo at a time, slower over the last three */
+        const int tick = REEL_TICK + (menu.reel_left <= 3 ? (4 - menu.reel_left) * 4 : 0);
+        if (++menu.reel_frames < tick)
+            return -1;
+        menu.reel_frames = 0;
+        menu.sel = (menu.sel + 1) % menu.n;
+        menu.reel_left--;
+        menu.dirty = 1;
+    }
+    if (menu.reel_left == 0)
+    {
+        menu.sel = menu.reel_target;
+        menu.reel = REEL_BLINK;
+        menu.reel_frames = 0;
+    }
+    return -1;
 }
 
 int gal_menu_frame(uint16_t buttons)
@@ -260,6 +385,18 @@ int gal_menu_frame(uint16_t buttons)
         return -1;
     const uint16_t pressed = buttons & ~menu.last_buttons;
     menu.last_buttons = buttons;
+
+    if (menu.reel)
+    {
+        if (!buttons)
+            return reel_frame();
+        /* Someone is at the board: the reel stops at the logo in the middle,
+         * which the scroll below settles on. The press does nothing else. */
+        menu.reel = 0;
+        menu.blink_off = 0;
+        menu.dirty = 1;
+        return -1;
+    }
 
     /* A button still held from the game (or from the settings menu, which
      * returns before the button that chose "Quit game" is released) is no
@@ -319,11 +456,10 @@ int gal_menu_frame(uint16_t buttons)
 
     if (menu.attract && ++menu.idle_frames >= ATTRACT_FRAMES)
     {
-        menu.attract = 0;
         /* rand() is seeded from the hardware RNG by Frens::initAll(); a fixed
          * seed stepped once a frame always lands on the same game after the
          * same 20 idle seconds */
-        return menu.games[rand() % menu.n];
+        reel_start();
     }
     return -1;
 }
@@ -405,7 +541,7 @@ static int spans_of(span_t *s)
         s[k].logo = slot < 0 ? NULL : logos[menu.games[slot]];
         s[k].marker = slot < 0 ? 0 : s[k].logo[0];
         s[k].marks = slot < 0 ? NULL : marks_of(slot) + ly * BANDS;
-        s[k].active = (slot == menu.sel);
+        s[k].active = (slot == menu.sel) && !menu.blink_off;
         k++;
     }
     return k;
