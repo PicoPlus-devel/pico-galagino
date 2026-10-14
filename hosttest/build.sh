@@ -8,8 +8,18 @@
 # The core in galagino/ has no Pico dependencies; this compiles it for Linux
 # with ASan. Drop -fsanitize=address (and use -O2) for timing measurements:
 #   OPT="-O2" hosttest/build.sh
+# With SDL2 installed (libsdl2-dev), gal_host also gets live mode (--live,
+# hosttest/host_sdl.c): a window, sound and the keyboard.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+
+SDL=()
+if pkg-config --exists sdl2 2>/dev/null; then
+  SDL=(-DHOST_SDL=1 hosttest/host_sdl.c $(pkg-config --cflags --libs sdl2))
+  echo "SDL2 $(pkg-config --modversion sdl2) found: gal_host with live mode (--live)"
+else
+  echo "SDL2 not found: gal_host without live mode (install libsdl2-dev for --live)"
+fi
 
 OPT=${OPT:--O1 -g -fsanitize=address -fno-omit-frame-pointer}
 CFLAGS=(
@@ -65,7 +75,7 @@ CORE=(
   third_party/miniz/miniz.c
 )
 
-gcc "${CFLAGS[@]}" -I pico_shared/drivers/pico_hdmi hosttest/gal_host.c "${CORE[@]}" -lm -o hosttest/gal_host
+gcc "${CFLAGS[@]}" -I pico_shared/drivers/pico_hdmi hosttest/gal_host.c "${CORE[@]}" "${SDL[@]}" -lm -o hosttest/gal_host
 gcc "${CFLAGS[@]}" -DGAL_CONV_CHECK hosttest/conv_check.c "${CORE[@]}" -lm -o hosttest/conv_check
 gcc "${CFLAGS[@]}" -I hosttest hosttest/zex_host.c galagino/z80.c -o hosttest/zex_host
 # gal_flash.c reads the fake game table of the test

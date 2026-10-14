@@ -41,9 +41,30 @@
  * Every dumped frame is outdir/frame_NNNNN.ppm (320x240, the canvas the board
  * shows; with --tall the 640x480 the HSTX driver sends). A summary line per
  * second reports the time spent per frame.
+ *
+ * Live mode (built with SDL2, see build.sh):
+ *
+ *   ./hosttest/gal_host <romroot> [game|menu] [frames] [dump-every-N] [outdir] --live [options]
+ *
+ * shows the frames in a window, plays the sound and reads the keyboard, in
+ * real time. The game defaults to the menu, which starts the game picked, as
+ * on the board; attract mode runs each game 180 seconds unless --rotate says
+ * otherwise. Without a frame count it runs until the window is closed; frames
+ * are dumped with F12, and every Nth when N is given. Scripted input is ORed
+ * with the keyboard, and --wav and --video record what was played.
+ *   --scale N      window size, N times the picture (default 3, with --tall 2)
+ *   --mute         no sound output; paced on a timer
+ * The keys are those of a USB keyboard on the board: arrows joystick, Z (or C)
+ * fire, X (or V) fire or the game's second button, A coin (when released),
+ * S start; also MAME's 5 coin, 1 start, 2 two player start. A+S leaves a game
+ * for the menu, as SELECT+START and Quit game do on the board. Space pauses,
+ * N steps a frame while paused, Tab (held) fast-forwards, F12 dumps the frame
+ * on screen, Esc quits. With --tate 1 or 2 the window shows the picture
+ * upright; the dumps keep the canvas as it is.
  */
 #include <ctype.h>
 #include <dirent.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -52,11 +73,15 @@
 
 #include "galagino.h"
 #include "hstx_scale.h"
+#if HOST_SDL
+#include "host_sdl.h"
+#endif
 
 #define SAMPLERATE 44100
 #define SAMPLES_PER_FRAME 735
 #define MAX_KEYS 64
 #define TALL_W 256 /* the tall canvas of main.cpp */
+#define ATTRACT_SECONDS 180 /* main.cpp's GALAGINO_ATTRACT_SECONDS */
 
 /* --- stdio implementation of gal_io_t ----------------------------------- */
 
@@ -178,64 +203,95 @@ static void hiscore_save(const char *dir, int game, const uint8_t *data)
     printf("high scores: wrote %s (%d bytes)\n", path, gal_hiscore_size());
 }
 
-/* --- output helpers ------------------------------------------------------ */
-
-/* The 320x240 RGB565 canvas as RGB24 */
-static void put_rgb(FILE *f, const uint16_t *fb)
+static void hiscore_load(const char *dir, int game)
 {
-    for (int i = 0; i < 320 * 240; i++)
-    {
-        uint16_t p = fb[i];
-        uint8_t rgb[3] = {(uint8_t)(((p >> 11) & 0x1f) * 255 / 31), (uint8_t)(((p >> 5) & 0x3f) * 255 / 63),
-                          (uint8_t)((p & 0x1f) * 255 / 31)};
-        fwrite(rgb, 1, 3, f);
-    }
-}
-
-static void write_ppm(const char *path, const uint16_t *fb)
-{
-    FILE *f = fopen(path, "wb");
+    if (!gal_hiscore_size())
+        return;
+    char path[1024];
+    uint8_t saved[GAL_HISCORE_MAX];
+    hiscore_path(path, sizeof(path), dir, game);
+    FILE *f = fopen(path, "rb");
     if (!f)
         return;
-    fprintf(f, "P6\n320 240\n255\n");
-    put_rgb(f, fb);
+    if ((int)fread(saved, 1, sizeof(saved), f) == gal_hiscore_size())
+    {
+        gal_hiscore_load(saved);
+        printf("high scores: read %s\n", path);
+    }
     fclose(f);
 }
 
-/* --tall: a TALL_W x rows RGB555 canvas as the HSTX driver sends it, 640x480:
- * the rows scaled to the lines, the pixels doubled between black borders. */
-static void put_rgb_tall(FILE *f, const uint16_t *fb, int rows)
+/* --- output helpers ------------------------------------------------------ */
+
+static uint32_t rgb565(uint16_t p)
 {
-    const int pairs = TALL_W / 2, border = (640 - 2 * TALL_W) / 2;
-    for (uint32_t line = 0; line < 480; line++)
-    {
-        uint32_t q, a[TALL_W / 2], b[TALL_W / 2];
-        uint16_t px[TALL_W];
-        const uint32_t row = hstx_scale_row(line, (uint32_t)rows, 480, &q);
-        memcpy(a, fb + row * TALL_W, sizeof(a));
-        if (q)
-        {
-            memcpy(b, fb + (row + 1) * TALL_W, sizeof(b));
-            hstx_scale_blend(a, a, b, pairs, q);
-        }
-        memcpy(px, a, sizeof(px));
-        for (int x = 0; x < 640; x++)
-        {
-            const uint16_t p = (x < border || x >= 640 - border) ? 0 : px[(x - border) / 2];
-            uint8_t rgb[3] = {(uint8_t)(((p >> 10) & 0x1f) * 255 / 31), (uint8_t)(((p >> 5) & 0x1f) * 255 / 31),
-                              (uint8_t)((p & 0x1f) * 255 / 31)};
-            fwrite(rgb, 1, 3, f);
-        }
-    }
+    return (uint32_t)(((p >> 11) & 0x1f) * 255 / 31) << 16 | (uint32_t)(((p >> 5) & 0x3f) * 255 / 63) << 8 |
+           (uint32_t)((p & 0x1f) * 255 / 31);
 }
 
-static void write_ppm_tall(const char *path, const uint16_t *fb, int rows)
+static uint32_t rgb555(uint16_t p)
 {
+    return (uint32_t)(((p >> 10) & 0x1f) * 255 / 31) << 16 | (uint32_t)(((p >> 5) & 0x1f) * 255 / 31) << 8 |
+           (uint32_t)((p & 0x1f) * 255 / 31);
+}
+
+/* --tall: a line of the TALL_W x rows RGB555 canvas as the HSTX driver sends
+ * it, 640 wide: the rows scaled to 480 lines, the pixels doubled between black
+ * borders. */
+static void tall_line(const uint16_t *fb, int rows, uint32_t line, uint32_t *out)
+{
+    const int pairs = TALL_W / 2, border = (640 - 2 * TALL_W) / 2;
+    uint32_t q, a[TALL_W / 2], b[TALL_W / 2];
+    uint16_t px[TALL_W];
+    const uint32_t row = hstx_scale_row(line, (uint32_t)rows, 480, &q);
+    memcpy(a, fb + row * TALL_W, sizeof(a));
+    if (q)
+    {
+        memcpy(b, fb + (row + 1) * TALL_W, sizeof(b));
+        hstx_scale_blend(a, a, b, pairs, q);
+    }
+    memcpy(px, a, sizeof(px));
+    for (int x = 0; x < 640; x++)
+        out[x] = (x < border || x >= 640 - border) ? 0 : rgb555(px[(x - border) / 2]);
+}
+
+/* The picture as 0xRRGGBB: the 320x240 RGB565 canvas, or with --tall the
+ * 640x480 the HSTX driver makes of its canvas */
+static void to_rgb32(const uint16_t *fb, int tall, uint32_t *out)
+{
+    if (tall)
+        for (uint32_t line = 0; line < 480; line++)
+            tall_line(fb, gal_view_height(), line, out + line * 640);
+    else
+        for (int i = 0; i < 320 * 240; i++)
+            out[i] = rgb565(fb[i]);
+}
+
+/* The picture as RGB24 */
+static void put_rgb(FILE *f, const uint16_t *fb, int tall)
+{
+    static uint32_t px[640 * 480];
+    static uint8_t rgb[640 * 480 * 3];
+    const int n = tall ? 640 * 480 : 320 * 240;
+    to_rgb32(fb, tall, px);
+    for (int i = 0; i < n; i++)
+    {
+        rgb[3 * i] = (uint8_t)(px[i] >> 16);
+        rgb[3 * i + 1] = (uint8_t)(px[i] >> 8);
+        rgb[3 * i + 2] = (uint8_t)px[i];
+    }
+    fwrite(rgb, 3, n, f);
+}
+
+static void dump_frame(const char *outdir, int frame, const uint16_t *fb, int tall)
+{
+    char path[1100];
+    snprintf(path, sizeof(path), "%s/frame_%05d.ppm", outdir, frame);
     FILE *f = fopen(path, "wb");
     if (!f)
         return;
-    fprintf(f, "P6\n640 480\n255\n");
-    put_rgb_tall(f, fb, rows);
+    fprintf(f, "P6\n%d %d\n255\n", tall ? 640 : 320, tall ? 480 : 240);
+    put_rgb(f, fb, tall);
     fclose(f);
 }
 
@@ -276,9 +332,9 @@ static double now_s(void)
 }
 
 /* Starts a game as the board does: a large game that is not in the flash cache
- * is copied into it first (the board restarts for that). Returns the files
- * found; gal_running() tells whether it started. */
-static uint32_t start_game(int game, const char *romroot, const char *flash_path)
+ * is copied into it first (the board restarts for that), and its high scores
+ * are read. Returns the files found; gal_running() tells whether it started. */
+static uint32_t start_game(int game, const char *romroot, const char *flash_path, const char *hiscore_dir)
 {
     char dir[1024];
     snprintf(dir, sizeof(dir), "%s/%s", romroot, gal_games[game].folder);
@@ -298,8 +354,95 @@ static uint32_t start_game(int game, const char *romroot, const char *flash_path
     printf("%s: start %s in %.1f ms, arena %u of %u bytes, PSRAM %u of %u bytes\n", gal_games[game].title,
            gal_running() == game ? "ok" : "FAILED", (now_s() - t0) * 1000, gal_arena_peak(), gal_arena_size(),
            gal_psram_peak(), gal_psram_size());
+    if (gal_running() == game && hiscore_dir)
+        hiscore_load(hiscore_dir, game);
     return found;
 }
+
+/* Back to the game menu, the game just played selected, as main.cpp's
+ * enterMenu(). gal_menu_init stops the game. */
+static void leave_game(int game, gal_games_t installed, const char *hiscore_dir)
+{
+    uint8_t table[GAL_HISCORE_MAX];
+    if (hiscore_dir && gal_hiscore_flush(table))
+        hiscore_save(hiscore_dir, game, table);
+    gal_menu_init(installed, game);
+}
+
+#if HOST_SDL
+/* --- live mode: the keyboard as the pad of the cabinet --------------------- */
+
+/* main.cpp's mapInputs() without rapid fire and the START + A frame rate
+ * toggle: d-pad joystick, A (or X) fire, B (or Y) fire or the game's second
+ * button (1942's loop), START 1 player start. SELECT inserts a coin when it is
+ * released, unless another button was pressed while it was held; SELECT +
+ * START leaves a game (*leave), as the settings menu's Quit game does on the
+ * board. After that the keys count again once all are released, or a START
+ * still held would start the game selected in the menu. */
+static uint32_t live_prev;
+static int live_select_used, live_coin, live_wait_release;
+
+static uint16_t live_input(uint32_t pad, int *leave)
+{
+    const uint32_t combo = HSDL_SELECT | HSDL_START;
+    if ((pad & combo) == combo && (live_prev & combo) != combo)
+    {
+        *leave = 1;
+        live_wait_release = 1;
+    }
+    if (pad & HSDL_SELECT)
+    {
+        if (pad & ~(uint32_t)HSDL_SELECT)
+            live_select_used = 1;
+    }
+    else if (live_prev & HSDL_SELECT)
+    {
+        if (!live_select_used)
+            live_coin = 6; /* a coin switch is a pulse */
+        live_select_used = 0;
+    }
+    if ((pad & HSDL_COIN) && !(live_prev & HSDL_COIN))
+        live_coin = 6;
+    live_prev = pad;
+    if (live_wait_release)
+    {
+        live_wait_release = pad != 0;
+        live_coin = 0;
+        return 0;
+    }
+
+    uint16_t in = 0;
+    if (live_coin > 0)
+    {
+        live_coin--;
+        in |= GAL_BTN_COIN;
+    }
+    if (pad & HSDL_SELECT)
+        return in; /* a modifier combination, not game input */
+    if (pad & HSDL_START)
+        in |= GAL_BTN_START;
+    if (pad & HSDL_START2)
+        in |= GAL_BTN_START2;
+    if (pad & HSDL_LEFT)
+        in |= GAL_BTN_LEFT;
+    if (pad & HSDL_RIGHT)
+        in |= GAL_BTN_RIGHT;
+    if (pad & HSDL_UP)
+        in |= GAL_BTN_UP;
+    if (pad & HSDL_DOWN)
+        in |= GAL_BTN_DOWN;
+    if (pad & (HSDL_A | HSDL_X))
+        in |= GAL_BTN_FIRE;
+    if (pad & (HSDL_B | HSDL_Y))
+    {
+        if (gal_running() >= 0 && gal_has_extra_button((gal_game_id_t)gal_running()))
+            in |= GAL_BTN_EXTRA;
+        else
+            in |= GAL_BTN_FIRE;
+    }
+    return in;
+}
+#endif
 
 static int game_by_name(const char *s)
 {
@@ -315,29 +458,33 @@ static int game_by_name(const char *s)
 
 int main(int argc, char **argv)
 {
-    if (argc < 5)
+    /* the positional arguments come before the options */
+    const char *pos[5] = {NULL};
+    int npos = 0, a = 1;
+    for (; a < argc && argv[a][0] != '-'; a++)
     {
-        fprintf(stderr, "usage: %s <romroot> <game|menu> <frames> <dump-every-N> [outdir] [options]\n", argv[0]);
-        return 1;
+        if (npos == 5)
+        {
+            fprintf(stderr, "unexpected argument %s\n", argv[a]);
+            return 1;
+        }
+        pos[npos++] = argv[a];
     }
-    const char *romroot = argv[1];
-    const int menu_mode = !strcmp(argv[2], "menu");
-    const int game = menu_mode ? -1 : game_by_name(argv[2]);
-    const int frames = atoi(argv[3]);
-    const int every = atoi(argv[4]);
-    const char *outdir = "hosttest/out";
     int tate = 0, tall = 0, coin_at = -1, start_at = -1, play_at = -1, no_psram = 0, select = -1;
-    int attract_now = 0, rotate = 0;
+    int attract_now = 0, rotate = -1, live = 0, scale = 0, mute = 0;
     const char *video_path = NULL;
     const char *flash_path = NULL, *hiscore_dir = NULL;
     int key_at[MAX_KEYS], key_mask[MAX_KEYS], nkeys = 0;
     const char *wav_path = NULL;
-    int a = 5;
-    if (argc > 5 && argv[5][0] != '-')
-        outdir = argv[a++];
     for (; a < argc; a++)
     {
-        if (!strcmp(argv[a], "--tate") && a + 1 < argc)
+        if (!strcmp(argv[a], "--live"))
+            live = 1;
+        else if (!strcmp(argv[a], "--scale") && a + 1 < argc)
+            scale = atoi(argv[++a]);
+        else if (!strcmp(argv[a], "--mute"))
+            mute = 1;
+        else if (!strcmp(argv[a], "--tate") && a + 1 < argc)
             tate = atoi(argv[++a]);
         else if (!strcmp(argv[a], "--tall"))
             tall = 1;
@@ -378,9 +525,39 @@ int main(int argc, char **argv)
             return 1;
         }
     }
+#if !HOST_SDL
+    (void)scale;
+    (void)mute;
+    if (live)
+    {
+        fprintf(stderr,
+                "%s: built without SDL2, so --live is not available.\n"
+                "Install libsdl2-dev and rerun hosttest/build.sh.\n",
+                argv[0]);
+        return 1;
+    }
+#endif
+    if (npos < (live ? 1 : 4))
+    {
+        fprintf(stderr,
+                "usage: %s <romroot> <game|menu> <frames> <dump-every-N> [outdir] [options]\n"
+                "       %s <romroot> [game|menu] [frames] [dump-every-N] [outdir] --live [options]\n",
+                argv[0], argv[0]);
+        return 1;
+    }
+    const char *romroot = pos[0];
+    const int menu_mode = !pos[1] || !strcmp(pos[1], "menu");
+    const int game = menu_mode ? -1 : game_by_name(pos[1]);
+    /* live: until the window is closed, frames dumped with F12 */
+    const int frames = pos[2] ? atoi(pos[2]) : INT_MAX;
+    const int every = pos[3] ? atoi(pos[3]) : 0;
+    const char *outdir = pos[4] ? pos[4] : "hosttest/out";
+    /* live: attract mode runs as on the board */
+    if (rotate < 0)
+        rotate = live ? ATTRACT_SECONDS : 0;
     if (!menu_mode && (game < 0 || game >= GAL_GAME_COUNT))
     {
-        fprintf(stderr, "unknown game %s\n", argv[2]);
+        fprintf(stderr, "unknown game %s\n", pos[1]);
         return 1;
     }
 
@@ -433,29 +610,13 @@ int main(int argc, char **argv)
     }
     else
     {
-        uint32_t found = start_game(game, romroot, flash_path);
+        uint32_t found = start_game(game, romroot, flash_path, hiscore_dir);
         if (gal_running() != game)
         {
             for (int i = 0; i < gal_games[game].nfiles; i++)
                 if (!(found & (1u << i)))
                     printf("  missing: %s (crc %08x)\n", gal_games[game].files[i].name, gal_games[game].files[i].crc);
             return 2;
-        }
-        if (hiscore_dir && gal_hiscore_size())
-        {
-            char path[1024];
-            uint8_t saved[GAL_HISCORE_MAX];
-            hiscore_path(path, sizeof(path), hiscore_dir, game);
-            FILE *f = fopen(path, "rb");
-            if (f)
-            {
-                if ((int)fread(saved, 1, sizeof(saved), f) == gal_hiscore_size())
-                {
-                    gal_hiscore_load(saved);
-                    printf("high scores: read %s\n", path);
-                }
-                fclose(f);
-            }
         }
     }
 
@@ -479,12 +640,29 @@ int main(int argc, char **argv)
     const gal_orient_t orient = tall ? GAL_ORIENT_UPRIGHT_FULL : (gal_orient_t)tate;
     const int stride = tall ? TALL_W : 320;
     gal_render_borders(orient, fb, stride);
-    /* --rotate: the game the menu started, and whether attract mode did */
-    int in_game = -1, attract = 0, game_frames = 0;
-    for (int f = 0; f < frames; f++)
+
+#if HOST_SDL
+    static uint32_t px[640 * 480];
+    if (live)
     {
-        int repaint = 0;
+        const int turn = tall ? 0 : tate == GAL_ORIENT_TATE_CW ? 90 : tate == GAL_ORIENT_TATE_CCW ? 270 : 0;
+        if (!hsdl_init(tall ? 640 : 320, tall ? 480 : 240, turn, scale ? scale : tall ? 2 : 3, !mute, 16667))
+            return 1;
+    }
+#endif
+
+    /* the running game, or -1 for the menu, and whether attract mode started it */
+    int in_game = menu_mode ? -1 : game, attract = 0, game_frames = 0;
+    uint32_t pad = 0; /* live: the keyboard */
+    int quit = 0;
+    for (int f = 0; f < frames && !quit; f++)
+    {
+        int repaint = 0, leave = 0;
         uint16_t in = 0;
+#if HOST_SDL
+        if (live)
+            in |= live_input(pad, &leave);
+#endif
         if (coin_at >= 0 && f >= coin_at && f < coin_at + 4)
             in |= GAL_BTN_COIN;
         if (start_at >= 0 && f >= start_at && f < start_at + 4)
@@ -502,17 +680,26 @@ int main(int argc, char **argv)
         }
 
         double t0 = now_s();
-        if (in_game >= 0 && in)
+        if (in_game >= 0 && (in || pad))
             attract = 0; /* a player took over */
-        if (menu_mode && in_game < 0)
+        if (in_game >= 0 && leave)
+        {
+            printf("frame %d: back to the menu\n", f);
+            leave_game(in_game, installed, hiscore_dir);
+            in_game = -1;
+            repaint = 1;
+            memset(audio, 0, sizeof(audio));
+        }
+        else if (in_game < 0)
         {
             int g = gal_menu_frame(in);
             if (g >= 0)
             {
                 printf("frame %d: menu starts %s\n", f, gal_games[g].title);
-                if (rotate > 0)
+                /* without --rotate or --live the menu stays */
+                if (rotate > 0 || live)
                 {
-                    start_game(g, romroot, flash_path);
+                    start_game(g, romroot, flash_path, hiscore_dir);
                     attract = !in;
                     game_frames = 0;
                     if (gal_running() == g)
@@ -520,17 +707,18 @@ int main(int argc, char **argv)
                     else
                     {
                         gal_menu_init(installed, g);
-                        gal_menu_attract_now();
+                        if (attract)
+                            gal_menu_attract_now();
                     }
                     repaint = 1;
                 }
             }
             memset(audio, 0, sizeof(audio));
         }
-        else if (in_game >= 0 && attract && ++game_frames > rotate * 60)
+        else if (attract && rotate > 0 && ++game_frames > rotate * 60)
         {
             printf("frame %d: attract mode: next game\n", f);
-            gal_menu_init(installed, in_game);
+            leave_game(in_game, installed, hiscore_dir);
             gal_menu_attract_now();
             in_game = -1;
             repaint = 1;
@@ -540,8 +728,8 @@ int main(int argc, char **argv)
         {
             gal_run_frame(in, audio, SAMPLES_PER_FRAME);
             uint8_t table[GAL_HISCORE_MAX];
-            if (!menu_mode && hiscore_dir && gal_hiscore_poll(table))
-                hiscore_save(hiscore_dir, game, table);
+            if (hiscore_dir && gal_hiscore_poll(table))
+                hiscore_save(hiscore_dir, in_game, table);
         }
         double t1 = now_s();
         if (repaint)
@@ -550,7 +738,7 @@ int main(int argc, char **argv)
             memset(fb, 0, sizeof(fb));
             gal_render_borders(orient, fb, stride);
         }
-        if (menu_mode && in_game < 0)
+        if (in_game < 0)
             gal_menu_render(orient, fb, stride, f == 0 || repaint);
         else
             gal_render(orient, fb, stride);
@@ -575,21 +763,41 @@ int main(int argc, char **argv)
         }
 
         if (video)
-        {
-            if (tall)
-                put_rgb_tall(video, fb, gal_view_height());
-            else
-                put_rgb(video, fb);
-        }
+            put_rgb(video, fb, tall);
         if (every > 0 && (f % every) == 0)
+            dump_frame(outdir, f, fb, tall);
+
+#if HOST_SDL
+        if (live)
         {
-            char path[1100];
-            snprintf(path, sizeof(path), "%s/frame_%05d.ppm", outdir, f);
-            if (tall)
-                write_ppm_tall(path, fb, gal_view_height());
-            else
-                write_ppm(path, fb);
+            to_rgb32(fb, tall, px);
+            hsdl_present(px);
+            for (;;)
+            {
+                int ev = 0;
+                pad = hsdl_poll(&ev);
+                if (ev & HSDL_EV_DUMP)
+                {
+                    dump_frame(outdir, f, fb, tall);
+                    printf("LIVE: frame %d dumped to %s/frame_%05d.ppm\n", f, outdir, f);
+                }
+                if (ev & HSDL_EV_QUIT)
+                {
+                    quit = 1;
+                    break;
+                }
+                hsdl_status(in_game >= 0 ? gal_games[in_game].title : "game menu", f);
+                if (!hsdl_paused() || (ev & HSDL_EV_STEP))
+                    break;
+                hsdl_idle();
+            }
+            if (!quit)
+            {
+                hsdl_audio(audio, SAMPLES_PER_FRAME);
+                hsdl_pace();
+            }
         }
+#endif
         if ((f + 1) % 60 == 0)
         {
             printf("frame %5d  emu %.3f ms (max %.3f)  render %.3f ms (max %.3f)  audio peak %d\n", f + 1,
@@ -607,7 +815,11 @@ int main(int argc, char **argv)
     if (video)
         fclose(video);
     uint8_t table[GAL_HISCORE_MAX];
-    if (!menu_mode && hiscore_dir && gal_hiscore_flush(table))
-        hiscore_save(hiscore_dir, game, table);
+    if (in_game >= 0 && hiscore_dir && gal_hiscore_flush(table))
+        hiscore_save(hiscore_dir, in_game, table);
+#if HOST_SDL
+    if (live)
+        hsdl_quit();
+#endif
     return 0;
 }
