@@ -267,7 +267,8 @@ int gal_running(void);
 void gal_reset(void);
 
 /* Runs one frame of the running game with these buttons (GAL_BTN_*) and
- * renders its audio, n mono samples at the rate given to gal_init. */
+ * renders its audio, n mono samples at the rate given to gal_init. Buttons
+ * already held at gal_start or gal_reset count only after they are released. */
 void gal_run_frame(uint16_t buttons, int16_t *audio, int n);
 
 /* --- High scores ------------------------------------------------------------

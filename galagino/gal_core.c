@@ -293,6 +293,7 @@ uint32_t gal_start(gal_game_id_t game, const gal_io_t *io, const char *dir)
     gal.ops = ops;
     gal.game = game;
     ops->reset();
+    gal.held = 0xffff;
     gal_hiscore_start();
     return found;
 }
@@ -302,6 +303,7 @@ void gal_reset(void)
     if (gal.ops)
     {
         gal.ops->reset();
+        gal.held = 0xffff;
         gal_hiscore_start();
     }
 }
@@ -317,7 +319,11 @@ void GAL_HOT(gal_run_frame)(uint16_t buttons, int16_t *audio, int n)
         memset(audio, 0, sizeof(int16_t) * n);
         return;
     }
-    gal.buttons = buttons;
+    /* A button still held from the menu that started the game (or from the
+     * settings menu's Reset Game) is not passed on until released: Amidar
+     * holds its crosshatch test for good when START is down at power-on. */
+    gal.held &= buttons;
+    gal.buttons = buttons & ~gal.held;
     int done = 0;
     for (int q = 0; q < 4; q++)
     {

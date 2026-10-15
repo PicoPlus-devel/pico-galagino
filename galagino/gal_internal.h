@@ -130,6 +130,7 @@ typedef struct
     int samplerate;
 
     uint16_t buttons; /* GAL_BTN_* of the current frame */
+    uint16_t held;    /* held since the reset, kept from the game until released */
     uint8_t game_started;
 
     z80_t cpu[3];
