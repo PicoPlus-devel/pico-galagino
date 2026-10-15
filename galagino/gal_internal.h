@@ -299,6 +299,10 @@ void gal_wsg15_render(const uint8_t *regs, const int8_t *waves, int enabled, int
  * clocked at `clock` Hz, Galagino's per-channel level ay_vol. */
 void gal_ay_reset(void);
 void gal_ay_render(int chips, int clock, int ay_vol, int16_t *out, int n);
+/* An RC low-pass on channel c of chip k, coefficient from gal_ay_lowpass_k
+ * (0: none, as after gal_ay_reset). */
+int gal_ay_lowpass_k(double rc);
+void gal_ay_lowpass(int k, int c, int coef);
 
 /* SN76489 / SN76496 */
 typedef struct

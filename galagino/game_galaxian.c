@@ -38,6 +38,10 @@
 #define SOUND_CYCLES_PER_FRAME 29531
 #define STEPS_PER_QUARTER 16
 #define AY_VOL 8
+/* Anteater plays its tunes at volume 12 on up to all six channels, where the
+ * other Konami games stay at 8 and below: with Galagino's linear volume that
+ * is twice as loud as they are, and more than 16 bits */
+#define AY_VOL_ANTEATER 5
 
 #define RAW_W 256
 #define Y0 16  /* the first visible raw line */
@@ -101,6 +105,7 @@ static struct
     uint8_t snd_command, snd_control, ay_addr[2];
     uint64_t snd_cycles;
     int32_t snd_run_start;
+    int lp_k[4]; /* the AY output filters, by their two control bits */
 
     /* Galaxian sound: rendered up to the CPU's position on every write */
     mcr_sound_t *dsnd;
@@ -658,11 +663,20 @@ static uint8_t GAL_HOT(snd_read)(z80_t *cpu, uint16_t addr)
     return 0xff;
 }
 
+/* 9000-9fff: the RC filters of the AY outputs (MAME's konami_sound_filter_w).
+ * The address is the data, two bits a channel: A6-A11 the first AY, A0-A5 the
+ * second. Each bit switches a capacitor to ground between the channel's 1k and
+ * the mixer's 5.1k: the low one 0.22 uF, the high one 0.047 uF. Anteater
+ * keeps them all on through its music. */
 static void GAL_HOT(snd_write)(z80_t *cpu, uint16_t addr, uint8_t data)
 {
     (void)cpu;
-    (void)addr;
-    (void)data; /* 9000-9fff: the RC filters of the AY outputs, not emulated */
+    (void)data;
+    if ((addr & 0xf000) != 0x9000)
+        return;
+    for (int k = 0; k < 2; k++)
+        for (int c = 0; c < 3; c++)
+            gal_ay_lowpass(k, c, gx.lp_k[(addr >> (2 * c + 6 * (1 - k))) & 3]);
 }
 
 static uint8_t GAL_HOT(snd_in)(z80_t *cpu, uint16_t port)
@@ -976,6 +990,9 @@ static int gx_init_common(uint8_t *const *regions, gx_var_t var, int r_prog, int
         cpu->write = snd_write;
         cpu->in = snd_in;
         cpu->out = snd_out;
+        const double r = 1000.0 * 5100.0 / (1000.0 + 5100.0);
+        for (int bits = 0; bits < 4; bits++)
+            gx.lp_k[bits] = gal_ay_lowpass_k(r * (0.22e-6 * (bits & 1) + 0.047e-6 * (bits >> 1)));
     }
     else
         mcr_sound_init(gx.dsnd, gal.samplerate);
@@ -1150,7 +1167,7 @@ static void GAL_HOT(gx_sound)(int16_t *out, int n)
 {
     if (gx.konami)
     {
-        gal_ay_render(2, KONAMI_SOUND_CLOCK, AY_VOL, out, n);
+        gal_ay_render(2, KONAMI_SOUND_CLOCK, gx.var == GX_ANTEATER ? AY_VOL_ANTEATER : AY_VOL, out, n);
         return;
     }
     if (n > (int)(sizeof(gx.qbuf) / sizeof(gx.qbuf[0])))

@@ -8,6 +8,8 @@
  */
 #include "gal_internal.h"
 
+#include <math.h>
+
 #define MASTER_VOLUME 64
 
 /* ---------------------------------------------------------------------------
@@ -144,13 +146,21 @@ void GAL_HOT(gal_voice_mix)(gal_voice_t *v, int16_t *out, int n)
  * The tone counters run at clock / 8 and flip the output after `period`
  * counts. Galagino advances them by clock / 8 / 24000 per sample, rounded
  * (9 for Frogger, 8 for 1942); here the step is kept in 1/256 counts.
+ *
+ * A channel can have a one-pole low-pass, the RC filter a board puts on its
+ * output (MAME's filter_rc): y += (x - y) * (1 - exp(-1 / (R C rate))). The
+ * sum is saturated, not wrapped, when the channels together exceed 16 bits.
  * ------------------------------------------------------------------------ */
+
+#define AY_LP_SHIFT 12 /* the coefficient's fraction bits */
 
 static struct
 {
     int32_t cnt[GAL_AY_MAX][4];
     int8_t toggle[GAL_AY_MAX][3];
     uint32_t rng[GAL_AY_MAX];
+    int16_t lp_k[GAL_AY_MAX][3]; /* 0: no filter */
+    int32_t lp_y[GAL_AY_MAX][3]; /* the filter's output, in 1/256 */
 } ay;
 
 void gal_ay_reset(void)
@@ -162,6 +172,19 @@ void gal_ay_reset(void)
         for (int c = 0; c < 3; c++)
             ay.toggle[k][c] = 1;
     }
+}
+
+int gal_ay_lowpass_k(double rc)
+{
+    if (rc <= 0)
+        return 0;
+    const int coef = (int)((1 << AY_LP_SHIFT) * (1.0 - exp(-1.0 / (rc * gal.samplerate))) + 0.5);
+    return coef < 1 ? 1 : coef;
+}
+
+void gal_ay_lowpass(int k, int c, int coef)
+{
+    ay.lp_k[k][c] = (int16_t)coef;
 }
 
 /* The 17-bit noise LFSR stepped s times. A step shifts right and puts
@@ -180,12 +203,12 @@ static inline uint32_t ay_noise_steps(uint32_t rng, int32_t s)
 void GAL_HOT(gal_ay_render)(int chips, int clock, int ay_vol, int16_t *out, int n)
 {
     const int32_t inc = (int32_t)((((int64_t)clock / 8) * 256 + gal.samplerate / 2) / gal.samplerate);
-    /* the channels that sound: a channel sounds if period != 0, volume != 0
-     * and it is enabled (bit 0 tone, bit 1 noise; the mixer register enables
-     * them with a 0) */
+    /* the channels that sound, and the filtered ones, which settle when
+     * silent: a channel sounds if period != 0, volume != 0 and it is enabled
+     * (bit 0 tone, bit 1 noise; the mixer register enables them with a 0) */
     struct
     {
-        int32_t period, amp;
+        int32_t period, amp, lp_k;
         uint8_t k, c, enable;
     } ch[3 * GAL_AY_MAX];
     int nch = 0;
@@ -198,10 +221,12 @@ void GAL_HOT(gal_ay_render)(int chips, int clock, int ay_vol, int16_t *out, int 
             const int32_t period = (r[2 * c] + 256 * (r[2 * c + 1] & 15)) << 8;
             const uint8_t enable = (uint8_t)((((r[7] >> c) & 1) | ((r[7] >> (c + 2)) & 2)) ^ 3);
             const int volume = r[8 + c] & 0x0f;
-            if (period && volume && enable)
+            const int sounds = period && volume && enable;
+            if (sounds || (ay.lp_k[k][c] && ay.lp_y[k][c]))
             {
                 ch[nch].period = period;
-                ch[nch].amp = ay_vol * volume;
+                ch[nch].amp = sounds ? ay_vol * volume : 0;
+                ch[nch].lp_k = ay.lp_k[k][c];
                 ch[nch].k = (uint8_t)k;
                 ch[nch].c = (uint8_t)c;
                 ch[nch].enable = enable;
@@ -227,25 +252,39 @@ void GAL_HOT(gal_ay_render)(int chips, int clock, int ay_vol, int16_t *out, int 
                 }
             }
         }
-        int v = 0;
+        int32_t v = 0; /* in 1/256 */
         for (int j = 0; j < nch; j++)
         {
             const int k = ch[j].k, c = ch[j].c;
-            int bit = 1;
-            if (ch[j].enable & 1)
-                bit &= ay.toggle[k][c] > 0;
-            if (ch[j].enable & 2)
-                bit &= ay.rng[k] & 1;
-            v += bit ? ch[j].amp : -ch[j].amp;
-
-            ay.cnt[k][c] += inc;
-            while (ay.cnt[k][c] >= ch[j].period)
+            int32_t x = 0;
+            if (ch[j].amp)
             {
-                ay.cnt[k][c] -= ch[j].period;
-                ay.toggle[k][c] = (int8_t)-ay.toggle[k][c];
+                int bit = 1;
+                if (ch[j].enable & 1)
+                    bit &= ay.toggle[k][c] > 0;
+                if (ch[j].enable & 2)
+                    bit &= ay.rng[k] & 1;
+                x = (bit ? ch[j].amp : -ch[j].amp) << 8;
+
+                ay.cnt[k][c] += inc;
+                while (ay.cnt[k][c] >= ch[j].period)
+                {
+                    ay.cnt[k][c] -= ch[j].period;
+                    ay.toggle[k][c] = (int8_t)-ay.toggle[k][c];
+                }
             }
+            if (ch[j].lp_k)
+            {
+                /* once the step rounds to 0 it has settled: no remainder
+                 * is left behind as a DC offset */
+                const int32_t step = ((x - ay.lp_y[k][c]) * ch[j].lp_k) >> AY_LP_SHIFT;
+                ay.lp_y[k][c] = step ? ay.lp_y[k][c] + step : x;
+                x = ay.lp_y[k][c];
+            }
+            v += x;
         }
-        out[i] = (int16_t)(v * MASTER_VOLUME);
+        const int32_t s = (v * MASTER_VOLUME) >> 8;
+        out[i] = (int16_t)(s > 32767 ? 32767 : s < -32768 ? -32768 : s);
     }
 }
 
