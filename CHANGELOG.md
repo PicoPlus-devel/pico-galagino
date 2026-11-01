@@ -18,6 +18,7 @@ Arcade games for RP2350 boards with DVI/HDMI output: Pac-Man, Galaga, Donkey Kon
 - At start-up, a screen lists all the games while the board looks for their ROM sets on the SD card. Each title is colored by the result: found, in flash, missing or needs PSRAM. The screen then shows how many games can be played.
 - USB controllers are ready as soon as the game menu appears.
 - Boards with PicoDVI output now also show every line of the game with *Tate mode* off, instead of leaving some out. The scanline screen mode is no longer offered on these boards.
+- With a USB keyboard, Enter selects and Esc goes back in the menus.
 - Fixed: on the Adafruit Fruit Jam and other boards with PIO-USB, USB controllers were often not found at start-up.
 
 ## v0.2
