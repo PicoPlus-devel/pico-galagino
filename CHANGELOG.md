@@ -13,6 +13,12 @@ Arcade games for RP2350 boards with DVI/HDMI output: Pac-Man, Galaga, Donkey Kon
 
 # Changelog
 
+## v0.3
+
+- The DIP switches of Pac-Man, Galaga, Donkey Kong and Dig Dug can now be changed in the settings menu while the game runs: coins per credit, lives and, depending on the game, the bonus life, difficulty, demo sounds and more. Saving a change restarts the game. The choices are kept per game on the SD card. The readme lists them.
+- New setting *Disable PSRAM*, for testing on a board with PSRAM how the games run without it. Saving a change restarts the board.
+- Fixed: Xevious, Gaplus, Mappy and The Tower of Druaga could show missing text or wrong colors when started after another game.
+
 ## v0.2.1
 
 - At start-up, a screen lists all the games while the board looks for their ROM sets on the SD card. Each title is colored by the result: found, in flash, missing or needs PSRAM. The screen then shows how many games can be played.

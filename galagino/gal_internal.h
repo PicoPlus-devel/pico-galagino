@@ -120,7 +120,15 @@ typedef struct
     uint8_t (*hs_read)(uint16_t addr);
     void (*hs_write)(uint16_t addr, uint8_t value);
     void (*hs_restored)(void);
+    /* The DIP switches offered (galagino.h); may be NULL. A game with a table
+     * reads its switches from gal.dip, which its init() sets to its defaults. */
+    const gal_dip_t *dips;
+    uint8_t ndips;
 } gal_game_ops_t;
+
+/* A row of a table of DIP switches. The help line is at most 40 characters. */
+#define GAL_DIP_ROW(label, text, port, mask, names, values) \
+    {label, text ". Saving restarts game", port, mask, sizeof(values), names, values}
 
 typedef struct
 {
@@ -132,6 +140,7 @@ typedef struct
     uint16_t buttons; /* GAL_BTN_* of the current frame */
     uint16_t held;    /* held since the reset, kept from the game until released */
     uint8_t game_started;
+    uint8_t dip[GAL_DIP_PORTS]; /* the DIP switches, see gal_game_ops_t; fills the padding */
 
     z80_t cpu[3];
     uint8_t ram[GAL_RAMSIZE];
@@ -167,7 +176,8 @@ uint32_t gal_cycles(void);
  * only needed while converting from the top. A game is given the SRAM arena,
  * or the PSRAM block the board provides (gal_set_psram) when it is large;
  * gal_fast_alloc takes from the SRAM arena either way, for data such a game
- * reads all the time. */
+ * reads all the time. What these return is not cleared: it holds what the
+ * previous game left, or anything at all in PSRAM. */
 void *gal_alloc(uint32_t size);      /* NULL when full */
 void *gal_fast_alloc(uint32_t size); /* NULL when full */
 void *gal_temp_alloc(uint32_t size); /* NULL when full */
@@ -290,6 +300,26 @@ typedef struct
 void gal_namcoio_reset(gal_namcoio_t *c);
 void gal_namcoio_run_56xx(gal_namcoio_t *c);
 void gal_namcoio_run_58xx(gal_namcoio_t *c);
+
+/* Namco 51XX (Galaga, Dig Dug): the game tells the chip its coinage at start-up,
+ * as command 1 and four bytes: coins per credit and credits per coin of each
+ * slot. The board has one coin button, which is the first slot. A game's own
+ * simulation of the chip uses these for that part. */
+typedef struct
+{
+    uint8_t coins_per_credit; /* 0: free play */
+    uint8_t credits_per_coin;
+    uint8_t coins;
+    uint8_t left; /* bytes of command 1 still to come */
+} gal_51xx_coinage_t;
+
+/* 1 coin 1 credit, until the game says otherwise. */
+void gal_51xx_reset(gal_51xx_coinage_t *c);
+/* A byte the game wrote to the chip; true when it was one of the four bytes of
+ * command 1, false when it is a command (command 1 is noted here). */
+int gal_51xx_write(gal_51xx_coinage_t *c, uint8_t value);
+/* A coin: the credits there are after it, at most 99. */
+uint8_t gal_51xx_coin(gal_51xx_coinage_t *c, uint8_t credits);
 
 /* Namco 15XX (Mappy): eight voices, their registers at regs[0..63]. */
 void gal_wsg15_reset(void);

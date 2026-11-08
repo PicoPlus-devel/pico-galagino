@@ -172,3 +172,43 @@ void gal_namcoio_run_56xx(gal_namcoio_t *c)
         break;
     }
 }
+
+/* --- The coinage of the 51XX -------------------------------------------------
+ * After the simulation in older versions of MAME's namcoio.c. Only the low
+ * nibble of a byte counts: Galaga sends 02 for 2, Dig Dug 12. */
+
+void gal_51xx_reset(gal_51xx_coinage_t *c)
+{
+    c->coins_per_credit = c->credits_per_coin = 1;
+    c->coins = c->left = 0;
+}
+
+int gal_51xx_write(gal_51xx_coinage_t *c, uint8_t value)
+{
+    if (!c->left)
+    {
+        if (value == 1)
+            c->left = 4;
+        return 0;
+    }
+    if (c->left == 4)
+        c->coins_per_credit = value & 0x0f;
+    else if (c->left == 3)
+        c->credits_per_coin = value & 0x0f;
+    c->left--;
+    return 1;
+}
+
+uint8_t gal_51xx_coin(gal_51xx_coinage_t *c, uint8_t credits)
+{
+    if (!c->coins_per_credit)
+        return credits; /* free play */
+    if (++c->coins >= c->coins_per_credit)
+    {
+        c->coins = 0;
+        credits += c->credits_per_coin;
+        if (credits > 99)
+            credits = 99;
+    }
+    return credits;
+}

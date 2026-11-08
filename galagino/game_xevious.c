@@ -411,6 +411,7 @@ static int xv_init(uint8_t *const *regions)
         const uint8_t lut = (uint8_t)((regions[8][0x200 + i] & 0x0f) | ((regions[8][i] & 0x0f) << 4));
         xv.bg_colors[i] = pal[lut & 0x7f];
     }
+    memset(xv.spr_mask, 0, 64); /* from the arena, as the previous game left it */
     for (int i = 0; i < 512; i++)
     {
         const uint8_t lut = (uint8_t)((regions[9][i] & 0x0f) | ((regions[9][0x200 + i] & 0x0f) << 4));

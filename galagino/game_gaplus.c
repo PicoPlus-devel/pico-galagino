@@ -484,6 +484,9 @@ static int gp_init(uint8_t *const *regions)
         }
         pal[i] = gal_color((uint16_t)(((c[0] >> 3) << 11) | ((c[1] >> 2) << 5) | (c[2] >> 3)));
     }
+    /* from the arena, as the previous game left it */
+    memset(gp.tile_mask, 0, 64);
+    memset(gp.spr_mask, 0, 64);
     for (int i = 0; i < 64 * 4; i++)
     {
         const uint8_t lut = regions[6][i] & 0x0f;

@@ -328,7 +328,7 @@ Bomb Jack checks its ROMs and RAM for about 20 seconds after it starts, Xevious 
 
 USB game controllers, NES and SNES controllers on the GPIO ports and the Wii Classic controller are supported, as in the other emulators of this family. A and B both press the fire button. Each has its own rapid fire setting, so one of them can fire single shots and the other fire automatically. The coin is inserted when SELECT is released, and only when no other button was pressed while it was held, so opening the settings menu does not insert a coin. While START is held, A switches the frame rate display (top left, in the border) on or off instead of firing.
 
-The DIP switches have Galagino's settings for its six games: an upright cabinet, 1 coin for 1 credit, three lives (Pac-Man, Galaga, Donkey Kong, Frogger, Dig Dug) or two (1942), and the default bonus lives. The other games have MAME's default settings, which are much the same: 1 coin for 1 credit and three lives.
+The DIP switches have Galagino's settings for its six games: an upright cabinet, 1 coin for 1 credit, three lives (Pac-Man, Galaga, Donkey Kong, Frogger, Dig Dug) or two (1942), and the default bonus lives. The other games have MAME's default settings, which are much the same: 1 coin for 1 credit and three lives. For Pac-Man, Galaga, Donkey Kong and Dig Dug, the DIP switches can be changed in the settings menu; see [DIP switches](#dip-switches).
 
 ***
 
@@ -361,15 +361,41 @@ Both pictures appear upright once the monitor is turned as described in the tabl
 
 ## Settings menu
 
-**SELECT + START** opens the settings menu. Besides *Tate mode*, it offers the screen mode with or without scanlines (on boards with HSTX output; PicoDVI boards have no scanlines), the FPS overlay, audio on/off, rapid fire on A and on B, the external audio output, the Fruit Jam volume and VU meter, the controller test, BOOTSEL mode and USB drive mode. In a game it also offers *Reset game*, and *Quit game*, which returns to the game menu. When started from pico-bootLoader, it also offers *Return to emulator selection*.
+**SELECT + START** opens the settings menu. Besides *Tate mode*, it offers the screen mode with or without scanlines (on boards with HSTX output; PicoDVI boards have no scanlines), the FPS overlay, audio on/off, rapid fire on A and on B, the external audio output, the Fruit Jam volume and VU meter, the controller test, BOOTSEL mode and USB drive mode. In a game it also offers *Reset game*, *Quit game*, which returns to the game menu, and for some games their [DIP switches](#dip-switches). When started from pico-bootLoader, it also offers *Return to emulator selection*. On boards with PSRAM it also offers *Disable PSRAM*.
 
 The settings are stored on the SD card in `/settings_ARC.dat`, a file shared by all arcade games of this family. The games have no save states.
+
+**Disable PSRAM** is a testing aid: set to **YES** and saved, it restarts the board, which then runs as a board without PSRAM, so the large games are copied into flash the first time they are started. Set it to **NO** to return to normal. The setting is stored in the flash of the board, not on the SD card, and a firmware update can reset it to **NO**.
+
+### DIP switches
+
+While Pac-Man, Galaga, Donkey Kong or Dig Dug is running, the settings menu also lists the DIP switches of that game. They do not appear in the game menu or in the other games, which keep their fixed settings.
+
+- **SAVE** with a changed switch restarts the game, as the game reads its switches when it starts. The game in progress is lost; the high score table is kept. **SAVE** without a changed switch does not restart the game.
+- **CANCEL** leaves the switches as they were.
+- **DEFAULT** selects the values shown in bold below, which take effect when saved. These are the settings the game has when nothing was changed. In Galaga and Dig Dug, demo sounds are off by default, as in Galagino; MAME's default is on.
+
+| Setting | Pac-Man | Galaga | Donkey Kong | Dig Dug |
+| --- | --- | --- | --- | --- |
+| Coinage (coins for credits) | 2 for 1, **1 for 1**, 1 for 2, free play | 4 for 1, 3 for 1, 2 for 1, **1 for 1**, 2 for 3, 1 for 2, 1 for 3, free play | 5 for 1, 4 for 1, 3 for 1, 2 for 1, **1 for 1**, 1 for 2, 1 for 3, 1 for 4 | 2 for 1, **1 for 1**, 2 for 3, 1 for 2 |
+| Lives | 1, 2, **3**, 5 | 2, **3**, 4, 5 | **3**, 4, 5, 6 | 1, 2, **3**, 5 |
+| Bonus life | **10000**, 15000, 20000, none | Not available | **7000**, 10000, 15000, 20000 | Not available |
+| Difficulty | **Normal**, hard | **Easy**, medium, hard, hardest | Not available | **Easy**, medium, hard, hardest |
+| Demo sounds | Not available | **Off**, on | Not available | **Off**, on |
+| Ghost names | **Normal**, alternate | Not available | Not available | Not available |
+| Continue | Not available | Not available | Not available | No, **yes** |
+
+The bonus life is not available in Galaga and Dig Dug because its switches have another meaning with 5 lives, while the choices of a menu row are fixed. It stays at its default setting, and the game shows it before a game starts: in Galaga 20000, 70000 and every 70000, or with 5 lives 30000, 120000 and every 120000; in Dig Dug 20000 and 60000, or with 5 lives only 20000.
+
+The following switches are not offered: flip screen and cabinet, because the flipped picture of a cocktail cabinet is not emulated; service mode; freeze and rack test, which are meant for testing the machine; and the second coin slot of Dig Dug, because there is one coin button.
+
+The choices are kept per game on the SD card, in `/SAVES/GALAGINO/<folder>.DIP` (for example `/SAVES/GALAGINO/GALAGA.DIP`), a short text file with a line per bank of switches, such as `dsw0=c9`. Without the file, or when it cannot be read, the game uses its defaults, so deleting the file restores them. Anything in the file that is not a choice of a menu row is ignored.
 
 ***
 
 ## High scores
 
-As in GalaginoPlus, the high score table of each game is kept on the SD card, in `/SAVES/GALAGINO/<folder>.HI` (for example `/SAVES/GALAGINO/GALAGA.HI`), and put back into the game the next time it is played. The tables are those of MAME's `hiscore.dat`. The board checks the table every five seconds and writes the file when it has changed, and again before the game is reset, left or the settings menu is opened. Deleting a file resets that game's table.
+As in GalaginoPlus, the high score table of each game is kept on the SD card, in `/SAVES/GALAGINO/<folder>.HI` (for example `/SAVES/GALAGINO/GALAGA.HI`), and put back into the game the next time it is played. The tables are those of MAME's `hiscore.dat`. The board checks the table every five seconds and writes the file when it has changed, and again before the game is reset, left or the settings menu is opened. Deleting a file resets that game's table. A game has one table whatever its [DIP switches](#dip-switches) are set to, so scores made at different settings are kept together.
 
 ***
 

@@ -447,7 +447,7 @@ static uint8_t GAL_HOT(dk_read)(z80_t *cpu, uint16_t addr)
         return v;
     }
     case 0x7d80:
-        return DKONG_DIP;
+        return gal.dip[0];
     }
     return 0xff;
 }
@@ -675,6 +675,7 @@ static int dk_init_common(uint8_t *const *regions)
     cpu->write = dk_write;
     cpu->in = dk_in;
     cpu->out = dk_out;
+    gal.dip[0] = DKONG_DIP;
     return 1;
 }
 
@@ -1132,6 +1133,22 @@ static const gal_hiscore_region_t dk_hiscore[] = {
     {0x75a1, 0x01, 0x00, 0x00},
 };
 
+/* Donkey Kong's DIP switches: MAME's DSW0, in gal.dip[0]. Galagino's settings are
+ * MAME's defaults. (DKONG_DIP_4C1P is really 5 coins, DKONG_DIP_4C3P 4 coins.) */
+static const char *const dk_coin_names[] = {"5 coins, 1 credit", "4 coins, 1 credit", "3 coins, 1 credit", "2 coins, 1 credit",
+                                            "1 coin, 1 credit",  "1 coin, 2 credits", "1 coin, 3 credits", "1 coin, 4 credits"};
+static const uint8_t dk_coin_values[] = {0x70, 0x50, 0x30, 0x10, 0x00, 0x20, 0x40, 0x60};
+static const char *const dk_lives_names[] = {"3", "4", "5", "6"};
+static const uint8_t dk_lives_values[] = {0x00, 0x01, 0x02, 0x03};
+static const char *const dk_bonus_names[] = {"7000", "10000", "15000", "20000"};
+static const uint8_t dk_bonus_values[] = {0x00, 0x04, 0x08, 0x0c};
+
+static const gal_dip_t dk_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x70, dk_coin_names, dk_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x03, dk_lives_names, dk_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 0, 0x0c, dk_bonus_names, dk_bonus_values),
+};
+
 const gal_game_ops_t gal_dkong_ops = {
     .init = dk_init,
     .reset = dk_reset,
@@ -1143,6 +1160,8 @@ const gal_game_ops_t gal_dkong_ops = {
     .view_h = 256,
     .hiscore = dk_hiscore,
     .nhiscore = sizeof(dk_hiscore) / sizeof(dk_hiscore[0]),
+    .dips = dk_dips,
+    .ndips = sizeof(dk_dips) / sizeof(dk_dips[0]),
 };
 
 static const gal_hiscore_region_t jr_hiscore[] = {

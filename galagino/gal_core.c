@@ -70,7 +70,7 @@ typedef struct
     uint32_t size, lo, hi, peak;
 } arena_t;
 
-static uint8_t __attribute__((aligned(4))) sram_mem[GAL_ARENA_SIZE];
+static uint8_t __attribute__((aligned(8))) sram_mem[GAL_ARENA_SIZE];
 static arena_t sram = {sram_mem, GAL_ARENA_SIZE, 0, GAL_ARENA_SIZE, 0};
 static arena_t psram;          /* empty until gal_set_psram */
 static arena_t *data = &sram; /* the running game's */
@@ -116,6 +116,30 @@ void *gal_temp_alloc(uint32_t size)
 void gal_temp_release(void)
 {
     data->hi = data->size;
+}
+
+/* A block below the arena's top part, aligned as malloc's are, with where that
+ * part started in the 8 bytes in front of it. */
+void *gal_scratch_alloc(uint32_t size)
+{
+    if (size > sram.hi - sram.lo || sram.hi - sram.lo - size < 16)
+        return NULL;
+    const uint32_t ofs = ((sram.hi - size) & ~7u) - 8;
+    uint32_t *block = (uint32_t *)(sram.mem + ofs);
+    *block = sram.hi;
+    sram.hi = ofs;
+    note_peak(&sram);
+    return block + 2;
+}
+
+int gal_scratch_free(void *p)
+{
+    uint32_t *block = (uint32_t *)p - 2;
+    if ((uint8_t *)p < sram.mem || (uint8_t *)p >= sram.mem + sram.size)
+        return 0;
+    if ((uint8_t *)block == sram.mem + sram.hi)
+        sram.hi = *block;
+    return 1;
 }
 
 void gal_arena_reset(void)
@@ -306,6 +330,33 @@ void gal_reset(void)
         gal.held = 0xffff;
         gal_hiscore_start();
     }
+}
+
+int gal_dip_rows(const gal_dip_t **rows)
+{
+    if (!gal.ops || !gal.ops->ndips)
+        return 0;
+    *rows = gal.ops->dips;
+    return gal.ops->ndips;
+}
+
+uint8_t *gal_dip_ports(void)
+{
+    return gal.dip;
+}
+
+int gal_dip_choice(const gal_dip_t *d, const uint8_t *ports)
+{
+    for (int c = 0; c < d->count; c++)
+        if ((ports[d->port] & d->mask) == d->values[c])
+            return c;
+    return -1;
+}
+
+void gal_dip_select(const gal_dip_t *d, uint8_t *ports, int choice)
+{
+    if (choice >= 0 && choice < d->count)
+        ports[d->port] = (uint8_t)((ports[d->port] & ~d->mask) | d->values[choice]);
 }
 
 #if GALAGINO_FRAME_STATS

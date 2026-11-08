@@ -308,6 +308,7 @@ static int mp_init_common(uint8_t *const *regions, int druaga)
      * sprites through the second into the first 16 */
     uint16_t pal[32];
     mp_palette(regions[4], pal);
+    memset(mp.tile_mask, 0, 64); /* from the arena, as the previous game left it */
     for (int i = 0; i < 64 * 4; i++)
     {
         const uint8_t lut = regions[5][i] & 0x0f;
