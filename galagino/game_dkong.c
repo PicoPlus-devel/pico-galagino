@@ -1143,10 +1143,19 @@ static const uint8_t dk_lives_values[] = {0x00, 0x01, 0x02, 0x03};
 static const char *const dk_bonus_names[] = {"7000", "10000", "15000", "20000"};
 static const uint8_t dk_bonus_values[] = {0x00, 0x04, 0x08, 0x0c};
 
+/* Donkey Kong Jr.: the same switches, with other bonus lives (MAME's dkongjr) */
+static const char *const jr_bonus_names[] = {"10000", "15000", "20000", "25000"};
+
 static const gal_dip_t dk_dips[] = {
     GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x70, dk_coin_names, dk_coin_values),
     GAL_DIP_ROW("Lives", "Lives at start", 0, 0x03, dk_lives_names, dk_lives_values),
     GAL_DIP_ROW("Bonus life", "Extra life at", 0, 0x0c, dk_bonus_names, dk_bonus_values),
+};
+
+static const gal_dip_t jr_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x70, dk_coin_names, dk_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x03, dk_lives_names, dk_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 0, 0x0c, jr_bonus_names, dk_bonus_values),
 };
 
 const gal_game_ops_t gal_dkong_ops = {
@@ -1181,6 +1190,8 @@ const gal_game_ops_t gal_dkongjr_ops = {
     .view_h = 256,
     .hiscore = jr_hiscore,
     .nhiscore = sizeof(jr_hiscore) / sizeof(jr_hiscore[0]),
+    .dips = jr_dips,
+    .ndips = sizeof(jr_dips) / sizeof(jr_dips[0]),
 };
 
 static const gal_hiscore_region_t dk3_hiscore[] = {

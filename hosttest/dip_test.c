@@ -366,10 +366,19 @@ static void test_tables(void)
         }
     }
     printf("%d games have DIP switch tables\n", with_table);
-    /* the games of this stage, and only those for now: a later stage changes this */
-    static const gal_game_id_t expected[] = {GAL_GAME_PACMAN, GAL_GAME_GALAGA, GAL_GAME_DKONG, GAL_GAME_DIGDUG};
+    /* the games that have one by now (stages 1 and 2); the others have none */
+    static const gal_game_id_t expected[] = {
+        GAL_GAME_PACMAN, GAL_GAME_GALAGA,  GAL_GAME_DKONG,   GAL_GAME_DIGDUG, GAL_GAME_MSPACMAN, GAL_GAME_CRUSH,
+        GAL_GAME_EYES,   GAL_GAME_MRTNT,   GAL_GAME_LIZWIZ,  GAL_GAME_THEGLOB, GAL_GAME_ALIBABA, GAL_GAME_PENGO,
+        GAL_GAME_VANVAN, GAL_GAME_DKONGJR,
+    };
+    int listed = 0;
     for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); i++)
+    {
         CHECK(gal_ops(expected[i])->ndips > 0, "%s has no table", gal_games[expected[i]].title);
+        listed++;
+    }
+    CHECK(with_table == listed, "%d games have a table, %d expected", with_table, listed);
 }
 
 /* The coinage of the 51XX, from the bytes the games send */

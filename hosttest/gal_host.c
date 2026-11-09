@@ -51,7 +51,7 @@
  *   --dip-at F:ROW=CHOICE  the same at frame F, then a restart, as saving a
  *                  change in the settings menu does (high scores kept)
  *   --dip-list     print the game's rows and exit, with an error when the
- *                  switches do not start on a choice of each row
+ *                  switches do not hold a choice of each row (after --dip)
  *   --video FILE   every frame, as raw RGB24 (320x240, with --tall 640x480),
  *                  for ffmpeg -f rawvideo -pix_fmt rgb24 -s WxH -r 60 -i FILE
  *
@@ -792,11 +792,11 @@ int main(int argc, char **argv)
                     printf("  missing: %s (crc %08x)\n", gal_games[game].files[i].name, gal_games[game].files[i].crc);
             return 2;
         }
-        if (dip_list_only)
-            return dip_list(game) ? 3 : 0;
         for (int k = 0; k < ndip_sets; k++)
             if (dip_sets[k].frame < 0 && !dip_apply(&dip_sets[k]))
                 return 1;
+        if (dip_list_only)
+            return dip_list(game) ? 3 : 0;
     }
 
     mkdir(outdir, 0755);

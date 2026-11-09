@@ -328,7 +328,7 @@ Bomb Jack checks its ROMs and RAM for about 20 seconds after it starts, Xevious 
 
 USB game controllers, NES and SNES controllers on the GPIO ports and the Wii Classic controller are supported, as in the other emulators of this family. A and B both press the fire button. Each has its own rapid fire setting, so one of them can fire single shots and the other fire automatically. The coin is inserted when SELECT is released, and only when no other button was pressed while it was held, so opening the settings menu does not insert a coin. While START is held, A switches the frame rate display (top left, in the border) on or off instead of firing.
 
-The DIP switches have Galagino's settings for its six games: an upright cabinet, 1 coin for 1 credit, three lives (Pac-Man, Galaga, Donkey Kong, Frogger, Dig Dug) or two (1942), and the default bonus lives. The other games have MAME's default settings, which are much the same: 1 coin for 1 credit and three lives. For Pac-Man, Galaga, Donkey Kong and Dig Dug, the DIP switches can be changed in the settings menu; see [DIP switches](#dip-switches).
+The DIP switches have Galagino's settings for its six games: an upright cabinet, 1 coin for 1 credit, three lives (Pac-Man, Galaga, Donkey Kong, Frogger, Dig Dug) or two (1942), and the default bonus lives. The other games have MAME's default settings, which are much the same: 1 coin for 1 credit and three lives. For fourteen of the games, the DIP switches can be changed in the settings menu; see [DIP switches](#dip-switches).
 
 ***
 
@@ -369,7 +369,7 @@ The settings are stored on the SD card in `/settings_ARC.dat`, a file shared by 
 
 ### DIP switches
 
-While Pac-Man, Galaga, Donkey Kong or Dig Dug is running, the settings menu also lists the DIP switches of that game. They do not appear in the game menu or in the other games, which keep their fixed settings.
+While one of the games in the tables below is running, the settings menu also lists the DIP switches of that game. They do not appear in the game menu or in the other games, which keep their fixed settings.
 
 - **SAVE** with a changed switch restarts the game, as the game reads its switches when it starts. The game in progress is lost; the high score table is kept. **SAVE** without a changed switch does not restart the game.
 - **CANCEL** leaves the switches as they were.
@@ -385,9 +385,23 @@ While Pac-Man, Galaga, Donkey Kong or Dig Dug is running, the settings menu also
 | Ghost names | **Normal**, alternate | Not available | Not available | Not available |
 | Continue | Not available | Not available | Not available | No, **yes** |
 
+The other games of the Pac-Man board, and Donkey Kong Jr.:
+
+| Game | Coinage (coins for credits) | Lives | Other settings |
+| --- | --- | --- | --- |
+| Ms. Pac-Man, Ali Baba | 2 for 1, **1 for 1**, 1 for 2, free play | 1, 2, **3**, 5 | Bonus life: **10000**, 15000, 20000, none. Difficulty: **normal**, hard |
+| Crush Roller | 2 for 1, **1 for 1**, 1 for 2, free play | **3**, 4, 5, 6 | First maze: **easy**, hard. Teleport holes: **off**, on |
+| Eyes | 2 for 1, **1 for 1**, 1 for 2, free play | 2, **3**, 4, 5 | Bonus life: **50000**, 75000, 100000, 125000 |
+| Mr. TNT | 2 for 1, **1 for 1**, 1 for 2, free play | 2, **3**, 4, 5 | Bonus life: **75000**, 100000, 125000, 150000 |
+| Lizard Wizard | 2 for 1, **1 for 1**, 1 for 2, free play | 2, **3**, 4, 5 | Bonus life: **75000**, 100000, 125000, 150000. Difficulty: **normal**, hard |
+| The Glob | Not available | **3**, 4, 5, 6 | Difficulty: eight steps from **easiest** to hardest. Demo sounds: off, **on** |
+| Pengo | Sixteen choices from 4 for 1 to 1 for 6, **1 for 1** among them; some give extra credits for more coins, for example 2 for 1 and 5 for 3 | 2, **3**, 4, 5 | Bonus life: **30000**, 50000. Difficulty: easy, **medium**, hard, hardest. Demo sounds: off, **on** |
+| Van-Van Car | 2 for 1, **1 for 1**, 1 for 2, 1 for 3 | **3**, 4, 5, 6 | Bonus life: 20000 and 100000, 40000 and 140000, 70000 and 200000, **none** |
+| Donkey Kong Jr. | 5 for 1, 4 for 1, 3 for 1, 2 for 1, **1 for 1**, 1 for 2, 1 for 3, 1 for 4 | **3**, 4, 5, 6 | Bonus life: **10000**, 15000, 20000, 25000 |
+
 The bonus life is not available in Galaga and Dig Dug because its switches have another meaning with 5 lives, while the choices of a menu row are fixed. It stays at its default setting, and the game shows it before a game starts: in Galaga 20000, 70000 and every 70000, or with 5 lives 30000, 120000 and every 120000; in Dig Dug 20000 and 60000, or with 5 lives only 20000.
 
-The following switches are not offered: flip screen and cabinet, because the flipped picture of a cocktail cabinet is not emulated; service mode; freeze and rack test, which are meant for testing the machine; and the second coin slot of Dig Dug, because there is one coin button.
+The following switches are not offered: flip screen and cabinet, because the flipped picture of a cocktail cabinet is not emulated; service mode; freeze and rack test, which are meant for testing the machine; the invulnerability of Van-Van Car, a cheat; switches whose purpose is not known; and the second coin slot of Dig Dug and Pengo, because there is one coin button.
 
 The choices are kept per game on the SD card, in `/SAVES/GALAGINO/<folder>.DIP` (for example `/SAVES/GALAGINO/GALAGA.DIP`), a short text file with a line per bank of switches, such as `dsw0=c9`. Without the file, or when it cannot be read, the game uses its defaults, so deleting the file restores them. Anything in the file that is not a choice of a menu row is ignored.
 

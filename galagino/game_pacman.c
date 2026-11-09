@@ -778,14 +778,15 @@ static int pengo_init(uint8_t *const *regions)
 {
     pm.var = PM_PENGO;
     pm.rom = regions[0];
-    gal.dip[0] = PENGO_DSW1;
-    gal.dip[1] = PENGO_DSW2;
     uint8_t *opcodes = (uint8_t *)gal_alloc(0x8000);
     /* the opcode page table: the second CPU's read table, which Pengo does
      * not use (the arena has no kilobyte to spare) */
     const uint8_t **op_page = gal.cpu[1].rd_page;
     if (!opcodes || !pm_common_init(regions, 1, 1, 2, 3, 4))
         return 0;
+    /* after pm_common_init, which sets gal.dip[1] for the others */
+    gal.dip[0] = PENGO_DSW1;
+    gal.dip[1] = PENGO_DSW2;
     sega_315_5010_decrypt(pm.rom, opcodes, 0x8000);
 
     /* 0000-7fff program; 8000-8fff RAM, opcodes run from 8800-8fff as well */
@@ -988,8 +989,13 @@ static const gal_hiscore_region_t pengo_hiscore[] = {
         .extra_button = extra, .hiscore = hs, .nhiscore = N(hs), __VA_ARGS__                       \
     }
 
-/* Pac-Man's DIP switches: MAME's DSW1, in gal.dip[0]. Galagino's settings are
- * MAME's defaults. */
+/* The DIP switches, as in MAME: DSW1 in gal.dip[0], Pengo's DSW2 in gal.dip[1].
+ * Every game starts at MAME's defaults (Pac-Man: Galagino's settings, the same).
+ * A table that is the start of another is shared: Ms. Pac-Man and Ali Baba have
+ * the first four rows of Pac-Man's, Mr. TNT the first three of Lizard Wizard's.
+ * Not offered: the cabinet, flip screen, service mode, rack test and the
+ * switches MAME does not know (Unknown); Pengo's coin slot 2, as there is one
+ * coin button. */
 static const char *const pm_coin_names[] = {"2 coins, 1 credit", "1 coin, 1 credit", "1 coin, 2 credits", "Free play"};
 static const uint8_t pm_coin_values[] = {0x03, 0x01, 0x02, 0x00};
 static const char *const pm_lives_names[] = {"1", "2", "3", "5"};
@@ -1000,6 +1006,8 @@ static const char *const pm_difficulty_names[] = {"Normal", "Hard"};
 static const uint8_t pm_difficulty_values[] = {0x40, 0x00};
 static const char *const pm_ghost_names[] = {"Normal", "Alternate"};
 static const uint8_t pm_ghost_values[] = {0x80, 0x00};
+static const char *const pm_off_on_names[] = {"OFF", "ON"};
+static const char *const pm_lives_3456_names[] = {"3", "4", "5", "6"};
 
 static const gal_dip_t pm_dips[] = {
     GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x03, pm_coin_names, pm_coin_values),
@@ -1008,20 +1016,101 @@ static const gal_dip_t pm_dips[] = {
     GAL_DIP_ROW("Difficulty", "Game difficulty", 0, 0x40, pm_difficulty_names, pm_difficulty_values),
     GAL_DIP_ROW("Ghost names", "Ghost nicknames", 0, 0x80, pm_ghost_names, pm_ghost_values),
 };
+#define PM_DIPS_SHARED 4 /* Ms. Pac-Man and Ali Baba: all but the ghost names */
+
+/* Crush Roller */
+static const uint8_t crush_lives_values[] = {0x00, 0x04, 0x08, 0x0c};
+static const char *const crush_maze_names[] = {"Easy", "Hard"};
+static const uint8_t crush_maze_values[] = {0x10, 0x00};
+static const uint8_t crush_holes_values[] = {0x20, 0x00};
+static const gal_dip_t crush_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x03, pm_coin_names, pm_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x0c, pm_lives_3456_names, crush_lives_values),
+    GAL_DIP_ROW("First maze", "Its difficulty", 0, 0x10, crush_maze_names, crush_maze_values),
+    GAL_DIP_ROW("Teleport holes", "Holes in the maze", 0, 0x20, pm_off_on_names, crush_holes_values),
+};
+
+/* Eyes, Lizard Wizard and Mr. TNT */
+static const uint8_t ey_coin_values[] = {0x01, 0x03, 0x02, 0x00};
+static const char *const ey_lives_names[] = {"2", "3", "4", "5"};
+static const uint8_t ey_lives_values[] = {0x0c, 0x08, 0x04, 0x00};
+static const uint8_t ey_bonus_values[] = {0x30, 0x20, 0x10, 0x00};
+static const char *const eyes_bonus_names[] = {"50000", "75000", "100000", "125000"};
+static const char *const tnt_bonus_names[] = {"75000", "100000", "125000", "150000"};
+static const gal_dip_t eyes_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x03, pm_coin_names, ey_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x0c, ey_lives_names, ey_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 0, 0x30, eyes_bonus_names, ey_bonus_values),
+};
+static const gal_dip_t lizwiz_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x03, pm_coin_names, ey_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x0c, ey_lives_names, ey_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 0, 0x30, tnt_bonus_names, ey_bonus_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 0, 0x40, pm_difficulty_names, pm_difficulty_values),
+};
+#define MRTNT_DIPS 3 /* Lizard Wizard's without the difficulty */
+
+/* The Glob (MAME theglobp) */
+static const uint8_t glob_lives_values[] = {0x03, 0x02, 0x01, 0x00};
+static const char *const glob_difficulty_names[] = {"Easiest",   "Very easy",      "Easy",      "Normal",
+                                                    "Difficult", "Very difficult", "Very hard", "Hardest"};
+static const uint8_t glob_difficulty_values[] = {0x1c, 0x18, 0x14, 0x10, 0x0c, 0x08, 0x04, 0x00};
+static const uint8_t glob_demo_values[] = {0x20, 0x00};
+static const gal_dip_t glob_dips[] = {
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x03, pm_lives_3456_names, glob_lives_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 0, 0x1c, glob_difficulty_names, glob_difficulty_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", 0, 0x20, pm_off_on_names, glob_demo_values),
+};
+
+/* Pengo: coin slot 1 is DSW2's low half */
+static const char *const pengo_coin_names[] = {
+    "4 coins, 1 credit",         "3 coins, 1 credit",        "2 coins, 1 credit",        "2 coins 1 credit, 5 for 3",
+    "2 coins 1 credit, 4 for 3", "1 coin, 1 credit",         "1 coin 1 credit, 5 for 6", "1 coin 1 credit, 4 for 5",
+    "1 coin 1 credit, 2 for 3",  "1 coin, 2 credits",        "1 coin 2 credits, 5 for 11", "1 coin 2 credits, 4 for 9",
+    "1 coin, 3 credits",         "1 coin, 4 credits",        "1 coin, 5 credits",        "1 coin, 6 credits",
+};
+static const uint8_t pengo_coin_values[] = {0x00, 0x08, 0x04, 0x09, 0x05, 0x0c, 0x0d, 0x03,
+                                            0x0b, 0x02, 0x07, 0x0f, 0x0a, 0x06, 0x0e, 0x01};
+static const char *const pengo_bonus_names[] = {"30000", "50000"};
+static const uint8_t pengo_bonus_values[] = {0x00, 0x01};
+static const uint8_t pengo_demo_values[] = {0x02, 0x00};
+static const uint8_t pengo_lives_values[] = {0x18, 0x10, 0x08, 0x00};
+static const char *const pengo_difficulty_names[] = {"Easy", "Medium", "Hard", "Hardest"};
+static const uint8_t pengo_difficulty_values[] = {0xc0, 0x80, 0x40, 0x00};
+static const gal_dip_t pengo_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 1, 0x0f, pengo_coin_names, pengo_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x18, ey_lives_names, pengo_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 0, 0x01, pengo_bonus_names, pengo_bonus_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 0, 0xc0, pengo_difficulty_names, pengo_difficulty_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", 0, 0x02, pm_off_on_names, pengo_demo_values),
+};
+
+/* Van-Van Car */
+static const char *const vv_coin_names[] = {"2 coins, 1 credit", "1 coin, 1 credit", "1 coin, 2 credits",
+                                            "1 coin, 3 credits"};
+static const uint8_t vv_coin_values[] = {0x00, 0xc0, 0x80, 0x40};
+static const uint8_t vv_lives_values[] = {0x30, 0x20, 0x10, 0x00};
+static const char *const vv_bonus_names[] = {"20000 and 100000", "40000 and 140000", "70000 and 200000", "None"};
+static const uint8_t vv_bonus_values[] = {0x08, 0x04, 0x00, 0x0c};
+static const gal_dip_t vanvan_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0xc0, vv_coin_names, vv_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x30, pm_lives_3456_names, vv_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 0, 0x0c, vv_bonus_names, vv_bonus_values),
+};
 
 const gal_game_ops_t gal_pacman_ops = PM_OPS(pm_init, pm_hiscore, 0, .dips = pm_dips, .ndips = N(pm_dips));
-const gal_game_ops_t gal_mspacman_ops = PM_OPS(ms_init, pm_hiscore, 0);
-const gal_game_ops_t gal_crush_ops = PM_OPS(crush_init, crush_hiscore, 0);
-const gal_game_ops_t gal_eyes_ops = PM_OPS(eyes_init, eyes_hiscore, 0);
-const gal_game_ops_t gal_mrtnt_ops = PM_OPS(mrtnt_init, mrtnt_hiscore, 0);
-const gal_game_ops_t gal_lizwiz_ops = PM_OPS(lizwiz_init, lizwiz_hiscore, 0);
-const gal_game_ops_t gal_theglob_ops = PM_OPS(glob_init, glob_hiscore, 1);
-const gal_game_ops_t gal_alibaba_ops = PM_OPS(alibaba_init, pm_hiscore, 0);
-const gal_game_ops_t gal_pengo_ops = PM_OPS(pengo_init, pengo_hiscore, 0);
+const gal_game_ops_t gal_mspacman_ops = PM_OPS(ms_init, pm_hiscore, 0, .dips = pm_dips, .ndips = PM_DIPS_SHARED);
+const gal_game_ops_t gal_crush_ops = PM_OPS(crush_init, crush_hiscore, 0, .dips = crush_dips, .ndips = N(crush_dips));
+const gal_game_ops_t gal_eyes_ops = PM_OPS(eyes_init, eyes_hiscore, 0, .dips = eyes_dips, .ndips = N(eyes_dips));
+const gal_game_ops_t gal_mrtnt_ops = PM_OPS(mrtnt_init, mrtnt_hiscore, 0, .dips = lizwiz_dips, .ndips = MRTNT_DIPS);
+const gal_game_ops_t gal_lizwiz_ops = PM_OPS(lizwiz_init, lizwiz_hiscore, 0, .dips = lizwiz_dips, .ndips = N(lizwiz_dips));
+const gal_game_ops_t gal_theglob_ops = PM_OPS(glob_init, glob_hiscore, 1, .dips = glob_dips, .ndips = N(glob_dips));
+const gal_game_ops_t gal_alibaba_ops = PM_OPS(alibaba_init, pm_hiscore, 0, .dips = pm_dips, .ndips = PM_DIPS_SHARED);
+const gal_game_ops_t gal_pengo_ops = PM_OPS(pengo_init, pengo_hiscore, 0, .dips = pengo_dips, .ndips = N(pengo_dips));
 const gal_game_ops_t gal_vanvan_ops = {
     .init = vanvan_init, .reset = pm_reset, .run_slice = pm_run_slice, .prepare_frame = pm_prepare_frame,
     .render_band = pm_render_band, .sound = pm_sound, .view_top = 16, .view_h = 256, .flip180 = 1,
-    .hiscore = vanvan_hiscore, .nhiscore = N(vanvan_hiscore),
+    .hiscore = vanvan_hiscore, .nhiscore = N(vanvan_hiscore), .dips = vanvan_dips, .ndips = N(vanvan_dips),
 };
 
 #ifdef GAL_CONV_CHECK
