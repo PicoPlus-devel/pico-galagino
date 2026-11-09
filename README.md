@@ -328,7 +328,7 @@ Bomb Jack checks its ROMs and RAM for about 20 seconds after it starts, Xevious 
 
 USB game controllers, NES and SNES controllers on the GPIO ports and the Wii Classic controller are supported, as in the other emulators of this family. A and B both press the fire button. Each has its own rapid fire setting, so one of them can fire single shots and the other fire automatically. The coin is inserted when SELECT is released, and only when no other button was pressed while it was held, so opening the settings menu does not insert a coin. While START is held, A switches the frame rate display (top left, in the border) on or off instead of firing.
 
-The DIP switches have Galagino's settings for its six games: an upright cabinet, 1 coin for 1 credit, three lives (Pac-Man, Galaga, Donkey Kong, Frogger, Dig Dug) or two (1942), and the default bonus lives. The other games have MAME's default settings, which are much the same: 1 coin for 1 credit and three lives. For fourteen of the games, the DIP switches can be changed in the settings menu; see [DIP switches](#dip-switches).
+The DIP switches have Galagino's settings for its six games: an upright cabinet, 1 coin for 1 credit, three lives (Pac-Man, Galaga, Donkey Kong, Frogger, Dig Dug) or two (1942), and the default bonus lives. The other games have MAME's default settings, which are much the same: 1 coin for 1 credit and three lives. For twenty-six of the games, the DIP switches can be changed in the settings menu; see [DIP switches](#dip-switches).
 
 ***
 
@@ -399,9 +399,28 @@ The other games of the Pac-Man board, and Donkey Kong Jr.:
 | Van-Van Car | 2 for 1, **1 for 1**, 1 for 2, 1 for 3 | **3**, 4, 5, 6 | Bonus life: 20000 and 100000, 40000 and 140000, 70000 and 200000, **none** |
 | Donkey Kong Jr. | 5 for 1, 4 for 1, 3 for 1, 2 for 1, **1 for 1**, 1 for 2, 1 for 3, 1 for 4 | **3**, 4, 5, 6 | Bonus life: **10000**, 15000, 20000, 25000 |
 
+The games of the Galaxian board, Frogger, Lady Bug, Mr. Do! and Phoenix:
+
+| Game | Coinage (coins for credits) | Lives | Other settings |
+| --- | --- | --- | --- |
+| Galaxian | 2 for 1, **1 for 1**, 1 for 2, free play | 2, **3** | Bonus life: **7000**, 10000, 12000, 20000 |
+| Moon Cresta | 4 for 1, 3 for 1, 2 for 1, **1 for 1** | Not available | Free play: **off**, on. Bonus life: **30000**, 50000. Language: **English**, Japanese |
+| Scramble | **1 for 1**, 1 for 2, 1 for 3, 1 for 4 | **3**, 4, 5 | None |
+| Super Cobra | 2 for 1, 4 for 3, **1 for 1**, 99 credits | **3**, 4 | Continue: no, **4 times** |
+| Turtles | **1 for 1**, 1 for 2, 1 for 3, 1 for 4 | 3, **4**, 5 | None |
+| Amidar | Sixteen choices from 4 for 1 to 1 for 7, **1 for 1** and free play among them | **3**, 4, 5 | Bonus life: **30000 and 70000**, 50000 and 80000. Demo sounds: off, **on** |
+| Anteater | **1 for 1**, 1 for 2, 1 for 3, 1 for 4 | **3**, 5 | Demo sounds: off, **on** |
+| Bagman | Not available | 2, **3**, 4, 5 | Difficulty: **easy**, medium, hard, hardest. Language: **English**, French |
+| Frogger | **1 for 1**, 2 for 1 | **3**, 5, 7 | None |
+| Lady Bug | Ten choices from 4 for 1 to 1 for 5, **1 for 1** among them | **3**, 5 | Free play: **off**, on. Difficulty: **easy**, medium, hard, hardest. High score names: 3 letters, **10 letters** |
+| Mr. Do! | Ten choices from 4 for 1 to 1 for 5, **1 for 1** among them, and free play | 2, **3**, 4, 5 | Difficulty: **easy**, medium, hard, hardest. Special and Extra: **easy**, hard |
+| Phoenix | 2 for 1, **1 for 1** | **3**, 4, 5, 6 | Bonus life: **3000 and 30000**, 4000 and 40000, 5000 and 50000, 6000 and 60000 |
+
+On the boards of Scramble, Super Cobra, Turtles, Anteater and Frogger, one switch sets the coinage of all coin slots together. The coin button is the first slot, so the table lists what each setting does there; settings that differ only for another slot are offered once. The version of Bagman that is emulated gives 1 credit per coin whatever its coinage switch is set to, so that switch is not offered.
+
 The bonus life is not available in Galaga and Dig Dug because its switches have another meaning with 5 lives, while the choices of a menu row are fixed. It stays at its default setting, and the game shows it before a game starts: in Galaga 20000, 70000 and every 70000, or with 5 lives 30000, 120000 and every 120000; in Dig Dug 20000 and 60000, or with 5 lives only 20000.
 
-The following switches are not offered: flip screen and cabinet, because the flipped picture of a cocktail cabinet is not emulated; service mode; freeze and rack test, which are meant for testing the machine; the invulnerability of Van-Van Car, a cheat; switches whose purpose is not known; and the second coin slot of Dig Dug and Pengo, because there is one coin button.
+The following switches are not offered: flip screen and cabinet, because the flipped picture of a cocktail cabinet is not emulated; service mode; freeze and rack test, which are meant for testing the machine; the invulnerability of Van-Van Car and the 255 or more lives of Scramble, Turtles, Amidar and Frogger, which are cheats; switches whose purpose is not known; and the second coin slot of the games that have one, because there is one coin button. Moon Cresta's free play, a setting of that slot, is offered on a row of its own.
 
 The choices are kept per game on the SD card, in `/SAVES/GALAGINO/<folder>.DIP` (for example `/SAVES/GALAGINO/GALAGA.DIP`), a short text file with a line per bank of switches, such as `dsw0=c9`. Without the file, or when it cannot be read, the game uses its defaults, so deleting the file restores them. Anything in the file that is not a choice of a menu row is ignored.
 

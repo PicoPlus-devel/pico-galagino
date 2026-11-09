@@ -69,7 +69,7 @@ static uint8_t GAL_HOT(fr_main_read)(z80_t *cpu, uint16_t addr)
         /* e002 = IN1: START1,START2,L2,R2,Fire2A,Fire2B,LIVES1,LIVES0 */
         else if (addr == 0xe002)
         {
-            v = FROGGER_DIP1 | 0xfc;
+            v = gal.dip[0];
             if (keys & GAL_BTN_START)
                 v &= ~0x80;
             if (keys & GAL_BTN_START2)
@@ -78,7 +78,7 @@ static uint8_t GAL_HOT(fr_main_read)(z80_t *cpu, uint16_t addr)
         /* e004 = IN2: -,D1,-,U1,UPRIGHT,COINS_P_PLAY,D2 */
         else if (addr == 0xe004)
         {
-            v = FROGGER_DIP2 | 0xf9;
+            v = gal.dip[1];
             if (keys & GAL_BTN_UP)
                 v &= ~0x10;
             if (keys & GAL_BTN_DOWN)
@@ -186,6 +186,9 @@ static void GAL_HOT(fr_snd_out)(z80_t *cpu, uint16_t port, uint8_t value)
 
 static int fr_init(uint8_t *const *regions)
 {
+    /* IN1 and IN2 of MAME, with Galagino's settings (MAME's defaults) */
+    gal.dip[0] = FROGGER_DIP1 | 0xfc;
+    gal.dip[1] = FROGGER_DIP2 | 0xf9;
     fr.rom[0] = regions[0];
     fr.rom[1] = regions[1];
     fr.tiles = (uint16_t *)gal_alloc(256 * 8 * 2);
@@ -377,6 +380,18 @@ static const gal_hiscore_region_t fr_hiscore[] = {
     {0x83ef, 0x02, 0x63, 0x04},
 };
 
+/* Frogger's DIP switches, as in MAME. The coin button is slot A: of the four
+ * settings of the coinage, which set slots A, B and C together, two differ for
+ * slot A. Not offered: the cabinet, and 256 lives, a cheat. */
+static const char *const fr_coin_names[] = {"1 coin, 1 credit", "2 coins, 1 credit"};
+static const uint8_t fr_coin_values[] = {0x00, 0x02};
+static const char *const fr_lives_names[] = {"3", "5", "7"};
+static const uint8_t fr_lives_values[] = {0x00, 0x01, 0x02};
+static const gal_dip_t fr_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 1, 0x06, fr_coin_names, fr_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x03, fr_lives_names, fr_lives_values),
+};
+
 const gal_game_ops_t gal_frogger_ops = {
     .init = fr_init,
     .reset = fr_reset,
@@ -388,6 +403,8 @@ const gal_game_ops_t gal_frogger_ops = {
     .view_h = 256,
     .hiscore = fr_hiscore,
     .nhiscore = sizeof(fr_hiscore) / sizeof(fr_hiscore[0]),
+    .dips = fr_dips,
+    .ndips = sizeof(fr_dips) / sizeof(fr_dips[0]),
 };
 
 #ifdef GAL_CONV_CHECK

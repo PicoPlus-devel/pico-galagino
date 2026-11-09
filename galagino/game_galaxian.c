@@ -96,7 +96,6 @@ static struct
     uint8_t prot_state_lo, prot_result;
     uint16_t prot_state;
     ppi_t ppi[2];
-    uint8_t in1_dsw, in2_dsw, in3;
 
     /* where the main CPU is in the frame */
     int run_base, run_len;
@@ -182,7 +181,7 @@ static uint8_t gx_in0_namco(void)
 static uint8_t gx_in1_namco(void)
 {
     const uint16_t k = gal.buttons;
-    uint8_t v = gx.in1_dsw;
+    uint8_t v = gal.dip[0];
     if (k & GAL_BTN_START)
         v |= 0x01;
     if (k & GAL_BTN_START2)
@@ -243,10 +242,10 @@ static uint8_t gx_konami_in(int port)
                 v &= ~0x80;
         }
         else if (port == 1)
-            v = gx.in1_dsw;
+            v = gal.dip[0];
         else
         {
-            v = gx.in2_dsw;
+            v = gal.dip[1];
             if (k & GAL_BTN_START)
                 v &= ~0x01;
             if (k & GAL_BTN_START2)
@@ -269,7 +268,7 @@ static uint8_t gx_konami_in(int port)
     }
     else if (port == 1)
     {
-        v = gx.in1_dsw;
+        v = gal.dip[0];
         if (k & GAL_BTN_START2)
             v &= ~0x40;
         if (k & GAL_BTN_START)
@@ -277,7 +276,7 @@ static uint8_t gx_konami_in(int port)
     }
     else
     {
-        v = gx.in2_dsw;
+        v = gal.dip[1];
         if (k & GAL_BTN_UP)
             v &= ~0x10;
         if (k & GAL_BTN_DOWN)
@@ -328,7 +327,7 @@ static uint8_t ppi_read(int n, int port)
     if (n == 0)
         return port < 3 ? gx_konami_in(port) : 0xff;
     if (port == 2)
-        return (gx.var == GX_SCRAMBLE) ? (uint8_t)((gx.ppi[1].c & 0x0f) | (gx.prot_result & 0xf0)) : gx.in3;
+        return (gx.var == GX_SCRAMBLE) ? (uint8_t)((gx.ppi[1].c & 0x0f) | (gx.prot_result & 0xf0)) : gal.dip[2];
     return port == 0 ? gx.ppi[1].a : port == 1 ? gx.ppi[1].b : 0xff;
 }
 
@@ -420,7 +419,7 @@ static uint8_t GAL_HOT(gx_read)(z80_t *cpu, uint16_t addr)
         case 0x6800:
             return gx_in1_namco();
         case 0x7000:
-            return gx.in2_dsw;
+            return gal.dip[1];
         default:
             return 0xff;
         }
@@ -432,7 +431,7 @@ static uint8_t GAL_HOT(gx_read)(z80_t *cpu, uint16_t addr)
         case 0xa800:
             return gx_in1_namco();
         case 0xb000:
-            return gx.in2_dsw;
+            return gal.dip[1];
         default:
             return 0xff;
         }
@@ -444,7 +443,7 @@ static uint8_t GAL_HOT(gx_read)(z80_t *cpu, uint16_t addr)
         case 0xa800:
             return (uint8_t)(0x80 | ((gal.buttons & GAL_BTN_START2) ? 0x01 : 0)); /* upright */
         case 0xb000:
-            return gx.in2_dsw;
+            return gal.dip[1];
         default:
             return 0xff;
         }
@@ -1006,8 +1005,8 @@ static int galaxian_init(uint8_t *const *regions)
 {
     if (!gx_init_common(regions, GX_GALAXIAN, 0, 0x2800, -1, 1, 0x1000, 2))
         return 0;
-    gx.in1_dsw = 0x00;
-    gx.in2_dsw = 0x04;
+    gal.dip[0] = 0x00;
+    gal.dip[1] = 0x04;
     return 1;
 }
 
@@ -1015,8 +1014,8 @@ static int mooncrst_init(uint8_t *const *regions)
 {
     if (!gx_init_common(regions, GX_MOONCRST, 0, 0x4000, -1, 1, 0x2000, 2))
         return 0;
-    gx.in1_dsw = 0x80;
-    gx.in2_dsw = 0x00;
+    gal.dip[0] = 0x80;
+    gal.dip[1] = 0x00;
     return 1;
 }
 
@@ -1025,7 +1024,7 @@ static int bagman_init(uint8_t *const *regions)
 {
     if (!gx_init_common(regions, GX_BAGMAN, 0, 0x6000, -1, 1, 0x4000, 2))
         return 0;
-    gx.in2_dsw = 0xfe;
+    gal.dip[1] = 0xfe;
     return 1;
 }
 
@@ -1035,8 +1034,8 @@ static int scramble_init(uint8_t *const *regions)
 {
     if (!gx_init_common(regions, GX_SCRAMBLE, 0, 0x4000, 1, 2, 0x1000, 3))
         return 0;
-    gx.in1_dsw = 0xfc; /* lives 0 */
-    gx.in2_dsw = 0xf1; /* coinage 0, upright */
+    gal.dip[0] = 0xfc; /* lives 0 */
+    gal.dip[1] = 0xf1; /* coinage 0, upright */
     return 1;
 }
 
@@ -1044,8 +1043,8 @@ static int scobra_init(uint8_t *const *regions)
 {
     if (!gx_init_common(regions, GX_SCOBRA, 0, 0x6000, 1, 2, 0x1000, 3))
         return 0;
-    gx.in1_dsw = 0xfd; /* allow continue, 3 lives */
-    gx.in2_dsw = 0xf3; /* 1C1C, upright */
+    gal.dip[0] = 0xfd; /* allow continue, 3 lives */
+    gal.dip[1] = 0xf3; /* 1C1C, upright */
     return 1;
 }
 
@@ -1053,8 +1052,8 @@ static int anteater_init(uint8_t *const *regions)
 {
     if (!gx_init_common(regions, GX_ANTEATER, 0, 0x4000, 1, 2, 0x1000, 3))
         return 0;
-    gx.in1_dsw = 0xfd; /* 3 lives, demo sounds on */
-    gx.in2_dsw = 0xfb; /* 1C1C */
+    gal.dip[0] = 0xfd; /* 3 lives, demo sounds on */
+    gal.dip[1] = 0xfb; /* 1C1C */
     return 1;
 }
 
@@ -1062,9 +1061,9 @@ static int turtles_init(uint8_t *const *regions)
 {
     if (!gx_init_common(regions, GX_TURTLES, 0, 0x5000, 1, 2, 0x1000, 3))
         return 0;
-    gx.in1_dsw = 0xfd; /* 4 lives */
-    gx.in2_dsw = 0xf1;
-    gx.in3 = 0x00;
+    gal.dip[0] = 0xfd; /* 4 lives */
+    gal.dip[1] = 0xf1;
+    gal.dip[2] = 0x00;
     return 1;
 }
 
@@ -1072,9 +1071,9 @@ static int amidar_init(uint8_t *const *regions)
 {
     if (!gx_init_common(regions, GX_AMIDAR, 0, 0x4000, 1, 2, 0x1000, 3))
         return 0;
-    gx.in1_dsw = 0xff; /* 3 lives */
-    gx.in2_dsw = 0xf1; /* demo sounds on, bonus at 30000 and 50000 */
-    gx.in3 = 0xff;     /* 1C1C on both slots */
+    gal.dip[0] = 0xff; /* 3 lives */
+    gal.dip[1] = 0xf1; /* demo sounds on, bonus at 30000 and 50000 */
+    gal.dip[2] = 0xff;     /* 1C1C on both slots */
     return 1;
 }
 
@@ -1519,18 +1518,125 @@ static void turtles_hs_restored(void)
 }
 
 #define N(a) (sizeof(a) / sizeof((a)[0]))
-#define GX_OPS(init_fn, hs, extra, restored)                                                            \
+#define GX_OPS(init_fn, hs, extra, restored, ...)                                                       \
     {                                                                                                  \
         .init = init_fn, .reset = gx_reset, .run_slice = gx_run_slice, .prepare_frame = gx_prepare_frame, \
         .render_band = gx_render_band, .sound = gx_sound, .view_top = 16, .view_h = 256,               \
-        .extra_button = extra, .hiscore = hs, .nhiscore = N(hs), .hs_restored = restored,              \
+        .extra_button = extra, .hiscore = hs, .nhiscore = N(hs), .hs_restored = restored, __VA_ARGS__  \
     }
 
-const gal_game_ops_t gal_galaxian_ops = GX_OPS(galaxian_init, galaxian_hiscore, 0, NULL);
-const gal_game_ops_t gal_mooncrst_ops = GX_OPS(mooncrst_init, mooncrst_hiscore, 0, NULL);
-const gal_game_ops_t gal_scramble_ops = GX_OPS(scramble_init, scramble_hiscore, 1, NULL);
-const gal_game_ops_t gal_scobra_ops = GX_OPS(scobra_init, scobra_hiscore, 1, NULL);
-const gal_game_ops_t gal_anteater_ops = GX_OPS(anteater_init, anteater_hiscore, 0, NULL);
-const gal_game_ops_t gal_turtles_ops = GX_OPS(turtles_init, turtles_hiscore, 0, turtles_hs_restored);
-const gal_game_ops_t gal_amidar_ops = GX_OPS(amidar_init, amidar_hiscore, 0, turtles_hs_restored);
-const gal_game_ops_t gal_bagman_ops = GX_OPS(bagman_init, bagman_hiscore, 0, NULL);
+/* The DIP switches, as in MAME: IN1 in gal.dip[0], IN2 in gal.dip[1], IN3 in
+ * gal.dip[2]; the reads put the controls into the other bits. Every game starts
+ * at MAME's defaults. The coin button is coin slot A, so a coinage row gives
+ * what that slot does; where one switch
+ * sets the slots together (A/B/C on the Konami boards), choices that differ
+ * only for another slot are left out. Not offered: the cabinet, service mode,
+ * unknown and unused switches, coin slot B, and the cheats among the lives
+ * (255 and 126). Moon Cresta's free play is a setting of slot B, offered on a
+ * row of its own. */
+static const char *const gx_off_on_names[] = {"OFF", "ON"};
+static const char *const gx_slot_a_names[] = {"1 coin, 1 credit", "1 coin, 2 credits", "1 coin, 3 credits",
+                                              "1 coin, 4 credits"};
+static const char *const gx_lives_345_names[] = {"3", "4", "5"};
+static const uint8_t gx_lives_345_values[] = {0x00, 0x01, 0x02};
+static const uint8_t gx_demo_values[] = {0x02, 0x00}; /* IN1 or IN2 bit 1: off, on */
+
+/* Galaxian */
+static const char *const gxn_coin_names[] = {"2 coins, 1 credit", "1 coin, 1 credit", "1 coin, 2 credits", "Free play"};
+static const uint8_t gxn_coin_values[] = {0x40, 0x00, 0x80, 0xc0};
+static const char *const gxn_lives_names[] = {"2", "3"};
+static const uint8_t gxn_lives_values[] = {0x00, 0x04};
+static const char *const gxn_bonus_names[] = {"7000", "10000", "12000", "20000"};
+static const uint8_t gxn_bonus_values[] = {0x00, 0x01, 0x02, 0x03};
+static const gal_dip_t galaxian_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0xc0, gxn_coin_names, gxn_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 1, 0x04, gxn_lives_names, gxn_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 1, 0x03, gxn_bonus_names, gxn_bonus_values),
+};
+
+/* Moon Cresta */
+static const char *const mc_coin_names[] = {"4 coins, 1 credit", "3 coins, 1 credit", "2 coins, 1 credit", "1 coin, 1 credit"};
+static const uint8_t mc_coin_values[] = {0x03, 0x02, 0x01, 0x00};
+static const uint8_t mc_free_values[] = {0x00, 0x0c};
+static const char *const mc_bonus_names[] = {"30000", "50000"};
+static const uint8_t mc_bonus_values[] = {0x00, 0x40};
+static const char *const mc_language_names[] = {"English", "Japanese"};
+static const uint8_t mc_language_values[] = {0x80, 0x00};
+static const gal_dip_t mooncrst_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 1, 0x03, mc_coin_names, mc_coin_values),
+    GAL_DIP_ROW("Free play", "No coins needed", 1, 0x0c, gx_off_on_names, mc_free_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 0, 0x40, mc_bonus_names, mc_bonus_values),
+    GAL_DIP_ROW("Language", "Language of texts", 0, 0x80, mc_language_names, mc_language_values),
+};
+
+/* Scramble and Turtles: the same coinage */
+static const uint8_t sc_coin_values[] = {0x00, 0x02, 0x04, 0x06};
+static const gal_dip_t scramble_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 1, 0x06, gx_slot_a_names, sc_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x03, gx_lives_345_names, gx_lives_345_values),
+};
+
+/* Super Cobra */
+static const char *const sb_coin_names[] = {"2 coins, 1 credit", "4 coins, 3 credits", "1 coin, 1 credit", "99 credits"};
+static const uint8_t sb_coin_values[] = {0x04, 0x06, 0x02, 0x00};
+static const char *const sb_lives_names[] = {"3", "4"};
+static const uint8_t sb_lives_values[] = {0x00, 0x02};
+static const char *const sb_continue_names[] = {"No", "4 times"};
+static const uint8_t sb_continue_values[] = {0x00, 0x01};
+static const gal_dip_t scobra_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 1, 0x06, sb_coin_names, sb_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x02, sb_lives_names, sb_lives_values),
+    GAL_DIP_ROW("Continue", "Continue a game", 0, 0x01, sb_continue_names, sb_continue_values),
+};
+
+/* Anteater */
+static const uint8_t ae_coin_values[] = {0x02, 0x00, 0x04, 0x06};
+static const char *const ae_lives_names[] = {"3", "5"};
+static const uint8_t ae_lives_values[] = {0x01, 0x00};
+static const gal_dip_t anteater_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 1, 0x06, gx_slot_a_names, ae_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x01, ae_lives_names, ae_lives_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", 0, 0x02, gx_off_on_names, gx_demo_values),
+};
+
+/* Amidar (MAME amidaru) */
+static const char *const am_coin_names[] = {
+    "4 coins, 1 credit",  "3 coins, 1 credit", "2 coins, 1 credit", "3 coins, 2 credits", "4 coins, 3 credits",
+    "1 coin, 1 credit",   "3 coins, 4 credits", "2 coins, 3 credits", "1 coin, 2 credits", "2 coins, 5 credits",
+    "1 coin, 3 credits",  "1 coin, 4 credits", "1 coin, 5 credits", "1 coin, 6 credits", "1 coin, 7 credits",
+    "Free play",
+};
+static const uint8_t am_coin_values[] = {0x04, 0x0a, 0x01, 0x02, 0x08, 0x0f, 0x0c, 0x0e,
+                                         0x07, 0x06, 0x0b, 0x03, 0x0d, 0x05, 0x09, 0x00};
+static const uint8_t am_lives_values[] = {0x03, 0x02, 0x01};
+static const char *const am_bonus_names[] = {"30000 and 70000", "50000 and 80000"};
+static const uint8_t am_bonus_values[] = {0x00, 0x04};
+static const gal_dip_t amidar_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 2, 0x0f, am_coin_names, am_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x03, gx_lives_345_names, am_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 1, 0x04, am_bonus_names, am_bonus_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", 1, 0x02, gx_off_on_names, gx_demo_values),
+};
+
+/* Bagman (MAME bagmanm2). Its coinage switch (IN2 bit 2) is not offered: this
+ * version gives 1 credit per coin whatever it is set to. */
+static const char *const bg_lives_names[] = {"2", "3", "4", "5"};
+static const uint8_t bg_lives_values[] = {0x03, 0x02, 0x01, 0x00};
+static const char *const bg_difficulty_names[] = {"Easy", "Medium", "Hard", "Hardest"};
+static const uint8_t bg_difficulty_values[] = {0x18, 0x10, 0x08, 0x00};
+static const char *const bg_language_names[] = {"English", "French"};
+static const uint8_t bg_language_values[] = {0x20, 0x00};
+static const gal_dip_t bagman_dips[] = {
+    GAL_DIP_ROW("Lives", "Lives at start", 1, 0x03, bg_lives_names, bg_lives_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 1, 0x18, bg_difficulty_names, bg_difficulty_values),
+    GAL_DIP_ROW("Language", "Language of texts", 1, 0x20, bg_language_names, bg_language_values),
+};
+
+const gal_game_ops_t gal_galaxian_ops = GX_OPS(galaxian_init, galaxian_hiscore, 0, NULL, .dips = galaxian_dips, .ndips = N(galaxian_dips));
+const gal_game_ops_t gal_mooncrst_ops = GX_OPS(mooncrst_init, mooncrst_hiscore, 0, NULL, .dips = mooncrst_dips, .ndips = N(mooncrst_dips));
+const gal_game_ops_t gal_scramble_ops = GX_OPS(scramble_init, scramble_hiscore, 1, NULL, .dips = scramble_dips, .ndips = N(scramble_dips));
+const gal_game_ops_t gal_scobra_ops = GX_OPS(scobra_init, scobra_hiscore, 1, NULL, .dips = scobra_dips, .ndips = N(scobra_dips));
+const gal_game_ops_t gal_anteater_ops = GX_OPS(anteater_init, anteater_hiscore, 0, NULL, .dips = anteater_dips, .ndips = N(anteater_dips));
+const gal_game_ops_t gal_turtles_ops = GX_OPS(turtles_init, turtles_hiscore, 0, turtles_hs_restored, .dips = scramble_dips, .ndips = N(scramble_dips));
+const gal_game_ops_t gal_amidar_ops = GX_OPS(amidar_init, amidar_hiscore, 0, turtles_hs_restored, .dips = amidar_dips, .ndips = N(amidar_dips));
+const gal_game_ops_t gal_bagman_ops = GX_OPS(bagman_init, bagman_hiscore, 0, NULL, .dips = bagman_dips, .ndips = N(bagman_dips));

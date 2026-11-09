@@ -15,7 +15,7 @@ Arcade games for RP2350 boards with DVI/HDMI output: Pac-Man, Galaga, Donkey Kon
 
 ## v0.3
 
-- The DIP switches of fourteen games can now be changed in the settings menu while the game runs (Pac-Man, Ms. Pac-Man, Crush Roller, Eyes, Mr. TNT, Lizard Wizard, The Glob, Ali Baba, Pengo, Van-Van Car, Galaga, Donkey Kong, Donkey Kong Jr. and Dig Dug): coins per credit, lives and, depending on the game, the bonus life, difficulty, demo sounds and more. Saving a change restarts the game. The choices are kept per game on the SD card. The readme lists them.
+- The DIP switches of twenty-six games can now be changed in the settings menu while the game runs (Pac-Man, Ms. Pac-Man, Crush Roller, Eyes, Mr. TNT, Lizard Wizard, The Glob, Ali Baba, Pengo, Van-Van Car, Galaga, Donkey Kong, Donkey Kong Jr., Dig Dug, Galaxian, Moon Cresta, Scramble, Super Cobra, Turtles, Amidar, Anteater, Bagman, Frogger, Lady Bug, Mr. Do! and Phoenix): coins per credit, lives and, depending on the game, the bonus life, difficulty, demo sounds and more. Saving a change restarts the game. The choices are kept per game on the SD card. The readme lists them.
 - New setting *Disable PSRAM*, for testing on a board with PSRAM how the games run without it. Saving a change restarts the board.
 - Fixed: Xevious, Gaplus, Mappy and The Tower of Druaga could show missing text or wrong colors when started after another game.
 - Fixed: Pengo gave two credits for each coin instead of one.
