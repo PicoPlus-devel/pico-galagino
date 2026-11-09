@@ -119,7 +119,7 @@ static uint8_t gy_read(z80_t *cpu, uint16_t addr)
     switch (addr)
     {
     case 0xc000:
-        return 0x69; /* DSW2, as GalaginoPlus: 5 lives, upright, bonus at 30000, normal */
+        return gal.dip[1]; /* DSW2 */
     case 0xc080: /* IN0, active low */
         if (keys & GAL_BTN_COIN)
             v &= ~0x01;
@@ -141,8 +141,10 @@ static uint8_t gy_read(z80_t *cpu, uint16_t addr)
             v &= ~0x10;
         return v;
     case 0xc100:
-        return 0x00; /* DSW3 */
-    default: /* c0c0 the second player, c0e0 DSW1 (1C1C) */
+        return gal.dip[2]; /* DSW3 */
+    case 0xc0e0:
+        return gal.dip[0]; /* DSW1 */
+    default: /* c0c0 the second player */
         return 0xff;
     }
 }
@@ -337,6 +339,11 @@ static void gy_palette(const uint8_t *prom, uint16_t *pal)
 
 static int gy_init(uint8_t *const *regions)
 {
+    /* MAME's DSW1-DSW3. As GalaginoPlus: 1C1C; 5 lives, upright, bonus at 30000, difficulty 2 of 8, demo
+     * sounds; demo music */
+    gal.dip[0] = 0xff;
+    gal.dip[1] = 0x69;
+    gal.dip[2] = 0x00;
     memset(&gy, 0, sizeof(gy));
     /* the programs and the RAM to SRAM */
     gy.ram = (uint8_t *)gal_fast_alloc(RAM_SIZE);
@@ -709,6 +716,26 @@ static const gal_hiscore_region_t gy_hiscore[] = {
     {0x940b, 0x03, 0x00, 0x01},
 };
 
+/* Gyruss's DIP switches, as in MAME. Galagino starts with 5 lives and
+ * difficulty 2, as GalaginoPlus. Not offered: the cabinet, coin slot B and the
+ * cheat of 255 lives. */
+static const char *const gy_lives_names[] = {"3", "4", "5"};
+static const uint8_t gy_lives_values[] = {0x03, 0x02, 0x01};
+static const char *const gy_bonus_names[] = {"30k 90k, every 60k", "40k 110k, every 70k"};
+static const uint8_t gy_bonus_values[] = {0x08, 0x00};
+static const char *const gy_difficulty_names[] = {"1 (easiest)", "2", "3", "4", "5 (average)", "6", "7", "8 (hardest)"};
+static const uint8_t gy_difficulty_values[] = {0x70, 0x60, 0x50, 0x40, 0x30, 0x20, 0x10, 0x00};
+static const uint8_t gy_demo_values[] = {0x80, 0x00};
+static const uint8_t gy_music_values[] = {0x01, 0x00};
+static const gal_dip_t gy_dips[] = {
+    KONAMI_COINAGE_ROW(0),
+    GAL_DIP_ROW("Lives", "Lives at start", 1, 0x03, gy_lives_names, gy_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 1, 0x08, gy_bonus_names, gy_bonus_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 1, 0x70, gy_difficulty_names, gy_difficulty_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", 1, 0x80, gal_dip_off_on, gy_demo_values),
+    GAL_DIP_ROW("Demo music", "Music in attract", 2, 0x01, gal_dip_off_on, gy_music_values),
+};
+
 const gal_game_ops_t gal_gyruss_ops = {
     .init = gy_init,
     .reset = gy_reset,
@@ -725,4 +752,6 @@ const gal_game_ops_t gal_gyruss_ops = {
     .derive = gy_derive,
     .hiscore = gy_hiscore,
     .nhiscore = sizeof(gy_hiscore) / sizeof(gy_hiscore[0]),
+    .dips = gy_dips,
+    .ndips = sizeof(gy_dips) / sizeof(gy_dips[0]),
 };

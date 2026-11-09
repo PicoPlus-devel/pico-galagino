@@ -58,6 +58,7 @@ static struct
     int nmi_steps, nmi_count;
     /* the 51XX, 50XX and 54XX */
     uint8_t cnt, credit_mode, coinage_args, credits, prot_param, n54_skip;
+    gal_51xx_coinage_t coinage; /* slot A's, from the 51XX's command 1 */
     uint16_t keys_d[3];
     uint32_t rng;
 } xv;
@@ -115,6 +116,7 @@ static void chips_reset(void)
     xv.ctrl = 0x10;
     xv.nmi_steps = xv.nmi_count = 0;
     xv.cnt = xv.credit_mode = xv.coinage_args = xv.n54_skip = 0;
+    gal_51xx_reset(&xv.coinage);
 }
 
 /* the 51XX in credit mode: the credits, then the joystick as a direction
@@ -129,7 +131,7 @@ static uint8_t read_51xx(void)
     if (!xv.credit_mode)
         return 0xff;
     if ((keys & GAL_BTN_COIN) && !(xv.keys_d[1] & GAL_BTN_COIN) && xv.credits < 99)
-        xv.credits++;
+        xv.credits = gal_51xx_coin(&xv.coinage, xv.credits);
     if ((keys & GAL_BTN_START) && !(xv.keys_d[1] & GAL_BTN_START) && xv.credits > 0)
         xv.credits--;
     const int up = keys & GAL_BTN_UP, down = keys & GAL_BTN_DOWN, left = keys & GAL_BTN_LEFT,
@@ -207,6 +209,11 @@ static void data_write(uint8_t value)
         /* the 51XX's commands */
         if (xv.coinage_args)
         {
+            /* six bytes: the third and fourth are slot A's coins and credits */
+            if (xv.coinage_args == 4)
+                xv.coinage.coins_per_credit = value & 0x0f;
+            else if (xv.coinage_args == 3)
+                xv.coinage.credits_per_coin = value & 0x0f;
             xv.coinage_args--;
             return;
         }
@@ -276,13 +283,13 @@ static uint8_t xv_read(z80_t *cpu, uint16_t addr)
     (void)cpu;
     if ((addr & 0xfff8) == 0x6800)
     {
-        /* MAME's bosco_dsw_r, both switches at their defaults (all off: 1C1C,
-         * 3 lives, bonus at 20000/60000, normal); DSWB bit 0 is the blaster */
+        /* MAME's bosco_dsw_r: DSWA in gal.dip[0], DSWB in gal.dip[1], whose bit 0
+         * is the blaster */
         const int bit = addr & 7;
-        int b0 = 1;
+        int b0 = (gal.dip[1] >> bit) & 1;
         if (bit == 0 && (gal.buttons & GAL_BTN_EXTRA))
             b0 = 0;
-        return (uint8_t)(b0 | 2);
+        return (uint8_t)(b0 | (((gal.dip[0] >> bit) & 1) << 1));
     }
     if (addr == 0x7100)
         return xv.ctrl;
@@ -355,6 +362,9 @@ static void xv_write(z80_t *cpu, uint16_t addr, uint8_t value)
 
 static int xv_init(uint8_t *const *regions)
 {
+    /* MAME's DSWA and DSWB, its defaults: all off */
+    gal.dip[0] = 0xff;
+    gal.dip[1] = 0xff;
     memset(&xv, 0, sizeof(xv));
     static const int rom_size[3] = {0x4000, 0x2000, 0x1000};
     for (int c = 0; c < 3; c++)
@@ -644,6 +654,23 @@ static const gal_hiscore_region_t xv_hiscore[] = {
     {0x8025, 0x01, 0x40, 0x40},
 };
 
+/* Xevious's DIP switches, as in MAME. Not offered: the cabinet, freeze, coin
+ * slot B, and the bonus life, whose switches mean something else with 5 lives. */
+static const char *const xv_coin_names[] = {"2 coins, 1 credit", "1 coin, 1 credit", "2 coins, 3 credits", "1 coin, 2 credits"};
+static const uint8_t xv_coin_values[] = {0x01, 0x03, 0x00, 0x02};
+static const char *const xv_lives_names[] = {"1", "2", "3", "5"};
+static const uint8_t xv_lives_values[] = {0x40, 0x20, 0x60, 0x00};
+static const char *const xv_difficulty_names[] = {"Easy", "Normal", "Hard", "Hardest"};
+static const uint8_t xv_difficulty_values[] = {0x40, 0x60, 0x20, 0x00};
+static const char *const xv_no_yes_names[] = {"No", "Yes"};
+static const uint8_t xv_flags_values[] = {0x00, 0x02};
+static const gal_dip_t xv_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x03, xv_coin_names, xv_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x60, xv_lives_names, xv_lives_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 1, 0x60, xv_difficulty_names, xv_difficulty_values),
+    GAL_DIP_ROW("Flag bonus", "Flags give a life", 1, 0x02, xv_no_yes_names, xv_flags_values),
+};
+
 const gal_game_ops_t gal_xevious_ops = {
     .init = xv_init,
     .reset = xv_reset,
@@ -661,4 +688,6 @@ const gal_game_ops_t gal_xevious_ops = {
     .derive = xv_derive,
     .hiscore = xv_hiscore,
     .nhiscore = sizeof(xv_hiscore) / sizeof(xv_hiscore[0]),
+    .dips = xv_dips,
+    .ndips = sizeof(xv_dips) / sizeof(xv_dips[0]),
 };

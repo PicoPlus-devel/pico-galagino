@@ -332,6 +332,16 @@ void gal_reset(void)
     }
 }
 
+const char *const gal_dip_off_on[2] = {"OFF", "ON"};
+const char *const gal_konami_coin_names[16] = {
+    "4 coins, 1 credit", "3 coins, 1 credit",  "2 coins, 1 credit", "3 coins, 2 credits", "4 coins, 3 credits",
+    "1 coin, 1 credit",  "3 coins, 4 credits", "2 coins, 3 credits", "1 coin, 2 credits", "2 coins, 5 credits",
+    "1 coin, 3 credits", "1 coin, 4 credits",  "1 coin, 5 credits", "1 coin, 6 credits",  "1 coin, 7 credits",
+    "Free play",
+};
+const uint8_t gal_konami_coin_values[16] = {0x02, 0x05, 0x08, 0x04, 0x01, 0x0f, 0x03, 0x07,
+                                            0x0e, 0x06, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x00};
+
 int gal_dip_rows(const gal_dip_t **rows)
 {
     if (!gal.ops || !gal.ops->ndips)

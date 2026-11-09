@@ -262,11 +262,21 @@ static uint8_t io_in0(int port)
     return v;
 }
 
-/* the DIP switches, MAME's defaults: all off */
+/* the DIP switches: MAME's DSWA_HIGH, DSWB_LOW, DSWB_HIGH and DSWA_LOW, in that
+ * order, from gal.dip[0] (DSWA) and gal.dip[1] (DSWB) */
 static uint8_t io_in1(int port)
 {
-    (void)port;
-    return 0x0f;
+    switch (port)
+    {
+    case 0:
+        return gal.dip[0] >> 4;
+    case 1:
+        return gal.dip[1] & 0x0f;
+    case 2:
+        return gal.dip[1] >> 4;
+    default:
+        return gal.dip[0] & 0x0f;
+    }
 }
 
 /* the 62XX */
@@ -415,6 +425,9 @@ static void poll_loop(m6809_state *c, const uint8_t *rom, uint16_t pc, uint8_t v
 
 static int gp_init(uint8_t *const *regions)
 {
+    /* MAME's DSWA and DSWB, its defaults: all off */
+    gal.dip[0] = 0xff;
+    gal.dip[1] = 0xff;
     memset(&gp, 0, sizeof(gp));
     /* the programs to SRAM */
     gp.rom = (uint8_t *)gal_fast_alloc(0x6000);
@@ -751,6 +764,28 @@ static void gp_hs_write(uint16_t addr, uint8_t value)
     gal.ram[addr & 0x1fff] = value;
 }
 
+/* Gaplus's DIP switches, as in MAME: DSWA in gal.dip[0], DSWB in gal.dip[1]
+ * (low half, high half). Not offered: the cabinet, service mode, coin slot B
+ * and Round Advance, a test aid. */
+static const char *const gp_coin_names[] = {"3 coins, 1 credit", "2 coins, 1 credit", "1 coin, 1 credit", "1 coin, 2 credits"};
+static const uint8_t gp_coin_values[] = {0x00, 0x10, 0x30, 0x20};
+static const char *const gp_lives_names[] = {"2", "3", "4", "5"};
+static const uint8_t gp_lives_values[] = {0x80, 0xc0, 0x40, 0x00};
+static const char *const gp_bonus_names[] = {"30k 70k, every 70k",   "30k 100k, every 100k", "30k 100k, every 200k",
+                                             "50k 100k, every 100k", "50k 100k, every 200k", "50k 150k, every 150k",
+                                             "50k 150k, every 300k", "50k and 150k"};
+static const uint8_t gp_bonus_values[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x07, 0x05, 0x06};
+static const char *const gp_difficulty_names[] = {"0 (standard)", "1 (easiest)", "2", "3", "4", "5", "6", "7 (hardest)"};
+static const uint8_t gp_difficulty_values[] = {0x70, 0x60, 0x50, 0x40, 0x30, 0x20, 0x10, 0x00};
+static const uint8_t gp_demo_values[] = {0x00, 0x08};
+static const gal_dip_t gp_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x30, gp_coin_names, gp_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0xc0, gp_lives_names, gp_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 1, 0x07, gp_bonus_names, gp_bonus_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 1, 0x70, gp_difficulty_names, gp_difficulty_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", 0, 0x08, gal_dip_off_on, gp_demo_values),
+};
+
 const gal_game_ops_t gal_gaplus_ops = {
     .init = gp_init,
     .reset = gp_reset,
@@ -769,4 +804,6 @@ const gal_game_ops_t gal_gaplus_ops = {
     .nhiscore = sizeof(gp_hiscore) / sizeof(gp_hiscore[0]),
     .hs_read = gp_hs_read,
     .hs_write = gp_hs_write,
+    .dips = gp_dips,
+    .ndips = sizeof(gp_dips) / sizeof(gp_dips[0]),
 };

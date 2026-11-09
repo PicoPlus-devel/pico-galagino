@@ -750,8 +750,12 @@ static uint8_t dk3_read(z80_t *cpu, uint16_t addr)
         return v;
     case 0x7c80: /* IN1: the coin */
         return (keys & GAL_BTN_COIN) ? 0x20 : 0;
+    case 0x7d00:
+        return gal.dip[0]; /* DSW0 */
+    case 0x7d80:
+        return gal.dip[1]; /* DSW1 */
     default:
-        return 0; /* the DIP switches: MAME's defaults, 1C1C, 3 lives, upright */
+        return 0;
     }
 }
 
@@ -840,6 +844,9 @@ static void dk3_derive(int i, const uint8_t *src, uint32_t ofs, uint8_t *out, ui
 
 static int dk3_init(uint8_t *const *regions)
 {
+    /* MAME's DSW0 and DSW1, its defaults: 1C1C, upright; 3 lives, bonus at 30000 and 30000, difficulty 1 */
+    gal.dip[0] = 0x00;
+    gal.dip[1] = 0x00;
     dk.var = DK_DKONG3;
     dk.jr = 0;
     /* the programs and what the CPUs use all the time to SRAM, the graphics
@@ -1201,6 +1208,24 @@ static const gal_hiscore_region_t dk3_hiscore[] = {
     {0x68f3, 0x03, 0x01, 0x00},
 };
 
+/* Donkey Kong 3's DIP switches, as in MAME. Not offered: the cabinet and
+ * service mode. */
+static const char *const dk3_coin_names[] = {"3 coins, 1 credit", "2 coins, 1 credit", "1 coin, 1 credit", "1 coin, 2 credits",
+                                             "1 coin, 3 credits", "1 coin, 4 credits", "1 coin, 5 credits", "1 coin, 6 credits"};
+static const uint8_t dk3_coin_values[] = {0x02, 0x04, 0x00, 0x06, 0x01, 0x03, 0x05, 0x07};
+static const char *const dk3_bonus_names[] = {"30000", "40000", "50000", "None"};
+static const uint8_t dk3_bonus_values[] = {0x00, 0x04, 0x08, 0x0c};
+static const uint8_t dk3_next_values[] = {0x00, 0x10, 0x20, 0x30};
+static const char *const dk3_difficulty_names[] = {"1 (easiest)", "2", "3", "4 (hardest)"};
+static const uint8_t dk3_difficulty_values[] = {0x00, 0x40, 0x80, 0xc0};
+static const gal_dip_t dk3_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x07, dk3_coin_names, dk3_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 1, 0x03, dk_lives_names, dk_lives_values),
+    GAL_DIP_ROW("Bonus life", "First extra life", 1, 0x0c, dk3_bonus_names, dk3_bonus_values),
+    GAL_DIP_ROW("Next bonus", "Second extra life", 1, 0x30, dk3_bonus_names, dk3_next_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 1, 0xc0, dk3_difficulty_names, dk3_difficulty_values),
+};
+
 const gal_game_ops_t gal_dkong3_ops = {
     .init = dk3_init,
     .reset = dk_reset,
@@ -1217,6 +1242,8 @@ const gal_game_ops_t gal_dkong3_ops = {
     .derive = dk3_derive,
     .hiscore = dk3_hiscore,
     .nhiscore = sizeof(dk3_hiscore) / sizeof(dk3_hiscore[0]),
+    .dips = dk3_dips,
+    .ndips = sizeof(dk3_dips) / sizeof(dk3_dips[0]),
 };
 
 #ifdef GAL_CONV_CHECK

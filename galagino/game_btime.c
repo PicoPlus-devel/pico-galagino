@@ -138,10 +138,10 @@ static uint8_t bnj_read(m6502_t *cpu, uint16_t addr)
     uint8_t v = 0xff;
     switch (addr)
     {
-    case 0x1000: /* DSW1, MAME's defaults: 1C1C, no test mode, upright; bit 7 the vertical blank */
-        return (uint8_t)(0x3f | (in_vblank() ? 0x80 : 0));
-    case 0x1001: /* DSW2: 3 lives, a bonus every 30000, continues, easy */
-        return 0xf7;
+    case 0x1000: /* DSW1; bit 7 the vertical blank */
+        return (uint8_t)((gal.dip[0] & 0x7f) | (in_vblank() ? 0x80 : 0));
+    case 0x1001: /* DSW2 */
+        return gal.dip[1];
     case 0x1002: /* P1, active low */
         if (keys & GAL_BTN_RIGHT)
             v &= ~0x01;
@@ -228,10 +228,10 @@ static uint8_t bt_read(m6502_t *cpu, uint16_t addr)
         if (keys & GAL_BTN_COIN)
             v |= 0x40;
         return v;
-    case 0x4003: /* DSW1, MAME's defaults: 1C1C, upright; bit 7 the vertical blank */
-        return (uint8_t)(0x3f | (in_vblank() ? 0x80 : 0));
-    case 0x4004: /* DSW2: 3 lives, bonus at 10000, easy, pepper at the end of a level */
-        return 0xeb;
+    case 0x4003: /* DSW1; bit 7 the vertical blank */
+        return (uint8_t)((gal.dip[0] & 0x7f) | (in_vblank() ? 0x80 : 0));
+    case 0x4004: /* DSW2 */
+        return gal.dip[1];
     default:
         break;
     }
@@ -385,11 +385,18 @@ static int bt_init_common(uint8_t *const *regions, int bnj)
 
 static int bt_init(uint8_t *const *regions)
 {
+    /* MAME's DSW1 and DSW2, its defaults: 1C1C, upright; 3 lives, bonus at 20000, 4 enemies, pepper at the
+     * end of a level */
+    gal.dip[0] = 0x3f;
+    gal.dip[1] = 0xeb;
     return bt_init_common(regions, 0);
 }
 
 static int bnj_init(uint8_t *const *regions)
 {
+    /* MAME's DSW1 and DSW2, its defaults: 1C1C, upright; 3 lives, a bonus every 30000, continues, easy */
+    gal.dip[0] = 0x3f;
+    gal.dip[1] = 0xf7;
     return bt_init_common(regions, 1);
 }
 
@@ -591,6 +598,38 @@ static const gal_hiscore_region_t bnj_hiscore[] = {
     {0x0640, 1, 0x4d, 0x4d},
 };
 
+/* The DIP switches of both games, as in MAME. Not offered: the cabinet, coin
+ * slot B and BurgerTime's "Leave Off" switch. */
+static const char *const bt_coin_names[] = {"2 coins, 1 credit", "1 coin, 1 credit", "1 coin, 2 credits", "1 coin, 3 credits"};
+static const uint8_t bt_coin_values[] = {0x00, 0x03, 0x02, 0x01};
+static const char *const bt_lives_names[] = {"3", "5"};
+static const uint8_t bt_lives_values[] = {0x01, 0x00};
+static const char *const bt_bonus_names[] = {"10000", "15000", "20000", "30000"};
+static const uint8_t bt_bonus_values[] = {0x06, 0x04, 0x02, 0x00};
+static const char *const bt_enemies_names[] = {"4", "6"};
+static const uint8_t bt_enemies_values[] = {0x08, 0x00};
+static const char *const bt_no_yes_names[] = {"No", "Yes"};
+static const uint8_t bt_pepper_values[] = {0x10, 0x00};
+static const gal_dip_t bt_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x03, bt_coin_names, bt_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 1, 0x01, bt_lives_names, bt_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 1, 0x06, bt_bonus_names, bt_bonus_values),
+    GAL_DIP_ROW("Enemies", "Enemies at once", 1, 0x08, bt_enemies_names, bt_enemies_values),
+    GAL_DIP_ROW("End-of-level pepper", "Pepper after level", 1, 0x10, bt_no_yes_names, bt_pepper_values),
+};
+static const char *const bnj_bonus_names[] = {"Every 30000", "Every 70000", "20000 only", "30000 only"};
+static const uint8_t bnj_bonus_values[] = {0x06, 0x04, 0x02, 0x00};
+static const uint8_t bnj_continue_values[] = {0x08, 0x00};
+static const char *const bnj_difficulty_names[] = {"Easy", "Hard"};
+static const uint8_t bnj_difficulty_values[] = {0x10, 0x00};
+static const gal_dip_t bnj_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x03, bt_coin_names, bt_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 1, 0x01, bt_lives_names, bt_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 1, 0x06, bnj_bonus_names, bnj_bonus_values),
+    GAL_DIP_ROW("Continue", "Continue a game", 1, 0x08, bt_no_yes_names, bnj_continue_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 1, 0x10, bnj_difficulty_names, bnj_difficulty_values),
+};
+
 const gal_game_ops_t gal_bnj_ops = {
     .init = bnj_init,
     .reset = bt_reset,
@@ -609,6 +648,8 @@ const gal_game_ops_t gal_bnj_ops = {
     .nhiscore = sizeof(bnj_hiscore) / sizeof(bnj_hiscore[0]),
     .hs_read = bt_hs_read,
     .hs_write = bt_hs_write,
+    .dips = bnj_dips,
+    .ndips = sizeof(bnj_dips) / sizeof(bnj_dips[0]),
 };
 
 const gal_game_ops_t gal_btime_ops = {
@@ -629,4 +670,6 @@ const gal_game_ops_t gal_btime_ops = {
     .nhiscore = 1,
     .hs_read = bt_hs_read,
     .hs_write = bt_hs_write,
+    .dips = bt_dips,
+    .ndips = sizeof(bt_dips) / sizeof(bt_dips[0]),
 };

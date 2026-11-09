@@ -366,18 +366,11 @@ static void test_tables(void)
         }
     }
     printf("%d games have DIP switch tables\n", with_table);
-    /* the games that have one by now (stages 1 to 3); the others have none */
-    static const gal_game_id_t expected[] = {
-        GAL_GAME_PACMAN, GAL_GAME_GALAGA,  GAL_GAME_DKONG,   GAL_GAME_DIGDUG, GAL_GAME_MSPACMAN, GAL_GAME_CRUSH,
-        GAL_GAME_EYES,   GAL_GAME_MRTNT,   GAL_GAME_LIZWIZ,  GAL_GAME_THEGLOB, GAL_GAME_ALIBABA, GAL_GAME_PENGO,
-        GAL_GAME_VANVAN, GAL_GAME_DKONGJR, GAL_GAME_GALAXIAN, GAL_GAME_MOONCRST, GAL_GAME_SCRAMBLE, GAL_GAME_SCOBRA,
-        GAL_GAME_ANTEATER, GAL_GAME_TURTLES, GAL_GAME_AMIDAR, GAL_GAME_BAGMAN, GAL_GAME_FROGGER, GAL_GAME_LADYBUG,
-        GAL_GAME_MRDO, GAL_GAME_PHOENIX,
-    };
+    /* every game has one by now */
     int listed = 0;
-    for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); i++)
+    for (int g = 0; g < GAL_GAME_COUNT; g++)
     {
-        CHECK(gal_ops(expected[i])->ndips > 0, "%s has no table", gal_games[expected[i]].title);
+        CHECK(gal_ops(g)->ndips > 0, "%s has no table", gal_games[g].title);
         listed++;
     }
     CHECK(with_table == listed, "%d games have a table, %d expected", with_table, listed);

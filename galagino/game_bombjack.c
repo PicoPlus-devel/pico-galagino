@@ -105,12 +105,12 @@ static uint8_t bj_read(z80_t *cpu, uint16_t addr)
                 v |= 0x08;
             return v;
         case 4:
-            return 0xc0; /* MAME's defaults: 1C1C, 3 lives, upright, demo sounds */
+            return gal.dip[0]; /* SW1 */
         case 3: /* the watchdog is kicked; nothing drives the bus */
             bj.wd_count = 0;
             return 0xff;
         case 5:
-            return 0x50; /* bird speed and enemies: moderate */
+            return gal.dip[1]; /* SW2 */
         default:
             return 0;
         }
@@ -217,6 +217,9 @@ static void bj_snd_out(z80_t *cpu, uint16_t port, uint8_t value)
 
 static int bj_init(uint8_t *const *regions)
 {
+    /* MAME's SW1 and SW2, its defaults: 1C1C, 3 lives, upright, demo sounds; bird speed and enemies hard */
+    gal.dip[0] = 0xc0;
+    gal.dip[1] = 0x50;
     memset(&bj, 0, sizeof(bj));
     /* the programs to SRAM */
     bj.rom = (uint8_t *)gal_fast_alloc(0xa000);
@@ -455,6 +458,27 @@ static const gal_hiscore_region_t bj_hiscore[] = {
     {0x80e2, 4, 0x00, 0x00}, {0x8100, 0x96, 0x00, 0xff},
 };
 
+/* Bomb Jack's DIP switches, as in MAME. Not offered: the cabinet, coin slot B
+ * and the bonus life, which the game does not use. */
+static const char *const bj_coin_names[] = {"1 coin, 1 credit", "1 coin, 2 credits", "1 coin, 3 credits", "1 coin, 6 credits"};
+static const uint8_t bj_coin_values[] = {0x00, 0x01, 0x02, 0x03};
+static const char *const bj_lives_names[] = {"2", "3", "4", "5"};
+static const uint8_t bj_lives_values[] = {0x30, 0x00, 0x10, 0x20};
+static const uint8_t bj_demo_values[] = {0x00, 0x80};
+static const char *const bj_level_names[] = {"Easy", "Medium", "Hard", "Hardest"};
+static const uint8_t bj_bird_values[] = {0x00, 0x08, 0x10, 0x18};
+static const uint8_t bj_enemies_values[] = {0x20, 0x00, 0x40, 0x60};
+static const char *const bj_easy_hard_names[] = {"Easy", "Hard"};
+static const uint8_t bj_special_values[] = {0x00, 0x80};
+static const gal_dip_t bj_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x03, bj_coin_names, bj_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x30, bj_lives_names, bj_lives_values),
+    GAL_DIP_ROW("Bird speed", "Speed of the bird", 1, 0x18, bj_level_names, bj_bird_values),
+    GAL_DIP_ROW("Enemies", "Number and speed", 1, 0x60, bj_level_names, bj_enemies_values),
+    GAL_DIP_ROW("Special coin", "Getting it", 1, 0x80, bj_easy_hard_names, bj_special_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", 0, 0x80, gal_dip_off_on, bj_demo_values),
+};
+
 const gal_game_ops_t gal_bombjack_ops = {
     .init = bj_init,
     .reset = bj_reset,
@@ -471,4 +495,6 @@ const gal_game_ops_t gal_bombjack_ops = {
     .derive = bj_derive,
     .hiscore = bj_hiscore,
     .nhiscore = sizeof(bj_hiscore) / sizeof(bj_hiscore[0]),
+    .dips = bj_dips,
+    .ndips = sizeof(bj_dips) / sizeof(bj_dips[0]),
 };

@@ -88,7 +88,7 @@ static uint8_t tp_read(z80_t *cpu, uint16_t addr)
         return (uint8_t)(c * 256 / CYCLES_PER_FRAME);
     }
     if ((addr & 0xf300) == 0xc200)
-        return 0x4b; /* DSW1, MAME's defaults: 3 lives, upright, bonus at 10000/50000, normal */
+        return gal.dip[1]; /* DSW1 */
     if ((addr & 0xf300) != 0xc300)
         return 0xff;
     switch (addr & 0x60)
@@ -115,8 +115,8 @@ static uint8_t tp_read(z80_t *cpu, uint16_t addr)
         return v;
     case 0x40: /* IN2: the second player of a cocktail cabinet */
         return 0xff;
-    default: /* DSW0: 1C1C */
-        return 0xff;
+    default: /* DSW0 */
+        return gal.dip[0];
     }
 }
 
@@ -157,7 +157,9 @@ static uint8_t py_read(z80_t *cpu, uint16_t addr)
     switch (addr & 0xa1e0)
     {
     case 0xa000:
-        return 0x7b; /* DSW1, MAME's defaults: 3 lives, upright, bonus at 50000/80000 */
+        return gal.dip[1]; /* DSW1 */
+    case 0xa0e0:
+        return gal.dip[0]; /* DSW0 */
     case 0xa080: /* IN0, active low */
         if (keys & GAL_BTN_COIN)
             v &= ~0x01;
@@ -247,6 +249,9 @@ static void py_palette(const uint8_t *prom, uint16_t *pal)
 
 static int py_init(uint8_t *const *regions)
 {
+    /* MAME's DSW0 and DSW1, its defaults: 1C1C; 3 lives, upright, bonus at 50000/80000, easiest */
+    gal.dip[0] = 0xff;
+    gal.dip[1] = 0x7b;
     memset(&tp, 0, sizeof(tp));
     tp.pooyan = 1;
     tp.cycles_per_frame = 50688; /* 3.072 MHz at 60.6 Hz */
@@ -290,6 +295,9 @@ static int py_init(uint8_t *const *regions)
 
 static int tp_init(uint8_t *const *regions)
 {
+    /* MAME's DSW0 and DSW1, its defaults: 1C1C; 3 lives, upright, bonus at 10000/50000, difficulty 4 */
+    gal.dip[0] = 0xff;
+    gal.dip[1] = 0x4b;
     memset(&tp, 0, sizeof(tp));
     tp.cycles_per_frame = CYCLES_PER_FRAME;
     tp.rom = regions[0];
@@ -373,7 +381,9 @@ static uint8_t rr_read(m6809_state *s, uint16_t addr)
     switch (addr)
     {
     case 0x3000:
-        return 0x5b; /* DSW2, MAME's defaults: 3 lives, upright, difficulty 5 of 16, demo sounds */
+        return gal.dip[1]; /* DSW2 */
+    case 0x3083:
+        return gal.dip[0]; /* DSW1 */
     case 0x3080: /* IN0, active low */
         if (keys & GAL_BTN_COIN)
             v &= ~0x01;
@@ -397,8 +407,8 @@ static uint8_t rr_read(m6809_state *s, uint16_t addr)
             v &= ~0x20;
         return v;
     case 0x3100:
-        return 0x96; /* DSW3, MAME's defaults: bonus at 20000 and every 60000 */
-    default: /* 3082 the second player, 3083 DSW1 (1C1C) */
+        return gal.dip[2]; /* DSW3 */
+    default: /* 3082 the second player */
         if (addr >= 0xfff2 && addr <= 0xfffd)
             return tp.vectors[addr - 0xfff2];
         return addr >= 0x6000 ? tp.rom[addr - 0x6000] : 0xff;
@@ -434,6 +444,11 @@ static void rr_write(m6809_state *s, uint16_t addr, uint8_t value)
 
 static int rr_init(uint8_t *const *regions)
 {
+    /* MAME's DSW1-DSW3, its defaults: 1C1C; 3 lives, upright, difficulty 5 of 16, demo sounds; bonus at
+     * 20000 and every 60000 */
+    gal.dip[0] = 0xff;
+    gal.dip[1] = 0x5b;
+    gal.dip[2] = 0x96;
     memset(&tp, 0, sizeof(tp));
     tp.rocnrope = 1;
     tp.cycles_per_frame = RR_CYCLES_PER_FRAME;
@@ -737,6 +752,54 @@ static void rr_hs_write(uint16_t addr, uint8_t value)
     gal.ram[(addr - 0x4000) & 0x1fff] = value;
 }
 
+/* The DIP switches of the three games, as in MAME. The coin button is slot A.
+ * Not offered: the cabinet, coin slot B, the cheat of 255 lives, and the
+ * values that repeat another (Roc'n Rope's bonuses). */
+static const char *const kt_lives_names[] = {"3", "4", "5"};
+static const uint8_t kt_lives_values[] = {0x03, 0x02, 0x01};
+static const uint8_t kt_demo_values[] = {0x80, 0x00};
+static const char *const kt_difficulty8_names[] = {"1 (easiest)", "2", "3", "4", "5", "6", "7", "8 (hardest)"};
+static const uint8_t kt_difficulty8_values[] = {0x70, 0x60, 0x50, 0x40, 0x30, 0x20, 0x10, 0x00};
+static const char *const tp_bonus_names[] = {"10000 and 50000", "20000 and 60000"};
+static const uint8_t kt_bonus_values[] = {0x08, 0x00};
+static const char *const py_bonus_names[] = {"50k, every 80k", "30k, every 70k"};
+
+static const gal_dip_t tp_dips[] = {
+    KONAMI_COINAGE_ROW(0),
+    GAL_DIP_ROW("Lives", "Lives at start", 1, 0x03, kt_lives_names, kt_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 1, 0x08, tp_bonus_names, kt_bonus_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 1, 0x70, kt_difficulty8_names, kt_difficulty8_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", 1, 0x80, gal_dip_off_on, kt_demo_values),
+};
+static const gal_dip_t py_dips[] = {
+    KONAMI_COINAGE_ROW(0),
+    GAL_DIP_ROW("Lives", "Lives at start", 1, 0x03, kt_lives_names, kt_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 1, 0x08, py_bonus_names, kt_bonus_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 1, 0x70, kt_difficulty8_names, kt_difficulty8_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", 1, 0x80, gal_dip_off_on, kt_demo_values),
+};
+
+/* Roc'n Rope: DSW2 in gal.dip[1], DSW3 in gal.dip[2] */
+static const char *const rr_difficulty_names[] = {"1 (easiest)", "2", "3", "4", "5", "6", "7", "8",
+                                                  "9", "10", "11", "12", "13", "14", "15", "16 (hardest)"};
+static const uint8_t rr_difficulty_values[] = {0x78, 0x70, 0x68, 0x60, 0x58, 0x50, 0x48, 0x40,
+                                               0x38, 0x30, 0x28, 0x20, 0x18, 0x10, 0x08, 0x00};
+static const char *const rr_first_names[] = {"20000", "30000", "40000", "50000", "60000", "70000", "80000"};
+static const uint8_t rr_first_values[] = {0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00}; /* 0x07 is 20000 too */
+static const char *const rr_next_names[] = {"40000", "50000", "60000", "70000", "80000"};
+static const uint8_t rr_next_values[] = {0x38, 0x18, 0x10, 0x08, 0x00}; /* 0x30-0x20 are 40000 too */
+static const char *const rr_repeat_names[] = {"No", "Yes"};
+static const uint8_t rr_repeat_values[] = {0x40, 0x00};
+static const gal_dip_t rr_dips[] = {
+    KONAMI_COINAGE_ROW(0),
+    GAL_DIP_ROW("Lives", "Lives at start", 1, 0x03, kt_lives_names, kt_lives_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 1, 0x78, rr_difficulty_names, rr_difficulty_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", 1, 0x80, gal_dip_off_on, kt_demo_values),
+    GAL_DIP_ROW("First bonus", "First extra life", 2, 0x07, rr_first_names, rr_first_values),
+    GAL_DIP_ROW("Next bonus", "Next extra life", 2, 0x38, rr_next_names, rr_next_values),
+    GAL_DIP_ROW("Repeat bonus", "Next one repeats", 2, 0x40, rr_repeat_names, rr_repeat_values),
+};
+
 const gal_game_ops_t gal_rocnrope_ops = {
     .init = rr_init,
     .reset = tp_reset,
@@ -756,6 +819,8 @@ const gal_game_ops_t gal_rocnrope_ops = {
     .nhiscore = sizeof(rr_hiscore) / sizeof(rr_hiscore[0]),
     .hs_read = rr_hs_read,
     .hs_write = rr_hs_write,
+    .dips = rr_dips,
+    .ndips = sizeof(rr_dips) / sizeof(rr_dips[0]),
 };
 
 const gal_game_ops_t gal_pooyan_ops = {
@@ -769,6 +834,8 @@ const gal_game_ops_t gal_pooyan_ops = {
     .view_h = 256,
     .hiscore = py_hiscore,
     .nhiscore = sizeof(py_hiscore) / sizeof(py_hiscore[0]),
+    .dips = py_dips,
+    .ndips = sizeof(py_dips) / sizeof(py_dips[0]),
 };
 
 const gal_game_ops_t gal_timeplt_ops = {
@@ -782,4 +849,6 @@ const gal_game_ops_t gal_timeplt_ops = {
     .view_h = 256,
     .hiscore = tp_hiscore,
     .nhiscore = sizeof(tp_hiscore) / sizeof(tp_hiscore[0]),
+    .dips = tp_dips,
+    .ndips = sizeof(tp_dips) / sizeof(tp_dips[0]),
 };

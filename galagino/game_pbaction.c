@@ -106,9 +106,9 @@ static uint8_t pa_read(z80_t *cpu, uint16_t addr)
             v |= 0x08;
         return v;
     case 0xe604:
-        return 0x40; /* MAME's defaults: 1C1C, 3 balls, upright, no demo sounds */
+        return gal.dip[0]; /* DSW1 */
     case 0xe605:
-        return 0x00; /* bonus at 70k 200k, normal flippers and outlanes */
+        return gal.dip[1]; /* DSW2 */
     default:
         return 0;
     }
@@ -182,6 +182,9 @@ static void pa_snd_out(z80_t *cpu, uint16_t port, uint8_t value)
 
 static int pa_init(uint8_t *const *regions)
 {
+    /* MAME's DSW1 and DSW2, its defaults: 1C1C, 3 balls, upright, demo sounds; bonus at 70k 200k, easy */
+    gal.dip[0] = 0x40;
+    gal.dip[1] = 0x00;
     memset(&pa, 0, sizeof(pa));
     /* the programs and the sound CPU's RAM to SRAM */
     pa.rom = (uint8_t *)gal_fast_alloc(0xa000);
@@ -390,6 +393,31 @@ static const gal_hiscore_region_t pa_hiscore[] = {
     {0xc12f, 0x27, 0x48, 0x4b},
 };
 
+/* Pinball Action's DIP switches, as in MAME. The coin button is MAME's Coin A,
+ * DSW1 bits 2-3. Not offered: the cabinet and coin slot B. */
+static const char *const pa_coin_names[] = {"2 coins, 1 credit", "1 coin, 1 credit", "1 coin, 2 credits", "1 coin, 3 credits"};
+static const uint8_t pa_coin_values[] = {0x04, 0x00, 0x08, 0x0c};
+static const char *const pa_balls_names[] = {"2", "3", "4", "5"};
+static const uint8_t pa_balls_values[] = {0x30, 0x00, 0x10, 0x20};
+static const uint8_t pa_demo_values[] = {0x80, 0x00};
+static const char *const pa_bonus_names[] = {"70k 200k 1000k", "100k 300k 1000k", "70k 200k", "100k 300k", "200k 1000k",
+                                             "100k", "200k", "None"};
+static const uint8_t pa_bonus_values[] = {0x01, 0x04, 0x00, 0x03, 0x06, 0x02, 0x05, 0x07};
+static const char *const pa_easy_hard_names[] = {"Easy", "Hard"};
+static const uint8_t pa_extra_values[] = {0x00, 0x08};
+static const char *const pa_level_names[] = {"Easy", "Medium", "Hard", "Hardest"};
+static const uint8_t pa_flippers_values[] = {0x00, 0x10, 0x20, 0x30};
+static const uint8_t pa_outlanes_values[] = {0x00, 0x40, 0x80, 0xc0};
+static const gal_dip_t pa_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x0c, pa_coin_names, pa_coin_values),
+    GAL_DIP_ROW("Balls", "Balls at start", 0, 0x30, pa_balls_names, pa_balls_values),
+    GAL_DIP_ROW("Bonus ball", "Extra ball at", 1, 0x07, pa_bonus_names, pa_bonus_values),
+    GAL_DIP_ROW("Extra", "Getting EXTRA", 1, 0x08, pa_easy_hard_names, pa_extra_values),
+    GAL_DIP_ROW("Flippers", "Their difficulty", 1, 0x30, pa_level_names, pa_flippers_values),
+    GAL_DIP_ROW("Outlanes", "Their difficulty", 1, 0xc0, pa_level_names, pa_outlanes_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", 0, 0x80, gal_dip_off_on, pa_demo_values),
+};
+
 const gal_game_ops_t gal_pbaction_ops = {
     .init = pa_init,
     .reset = pa_reset,
@@ -407,4 +435,6 @@ const gal_game_ops_t gal_pbaction_ops = {
     .derive = pa_derive,
     .hiscore = pa_hiscore,
     .nhiscore = sizeof(pa_hiscore) / sizeof(pa_hiscore[0]),
+    .dips = pa_dips,
+    .ndips = sizeof(pa_dips) / sizeof(pa_dips[0]),
 };

@@ -104,9 +104,9 @@ static uint8_t cc_read(m6809_state *s, uint16_t addr)
             return 0xff;
         }
     case 0x1400:
-        return 0xff; /* DSW1: 1C1C */
+        return gal.dip[0]; /* DSW1 */
     case 0x1800:
-        return 0x4b; /* DSW2, MAME's defaults: 3 lives, upright, bonus at 20000/70000, normal, demo sounds */
+        return gal.dip[1]; /* DSW2 */
     default:
         return 0;
     }
@@ -223,6 +223,9 @@ static void cc_palette(const uint8_t *prom, uint16_t *pal)
 
 static int cc_init(uint8_t *const *regions)
 {
+    /* MAME's DSW1 and DSW2, its defaults: 1C1C; 3 lives, upright, bonus at 20000/70000, normal, demo sounds */
+    gal.dip[0] = 0xff;
+    gal.dip[1] = 0x4b;
     memset(&cc, 0, sizeof(cc));
     /* the programs to SRAM */
     cc.rom = (uint8_t *)gal_fast_alloc(0xa000);
@@ -437,6 +440,23 @@ static void cc_hs_write(uint16_t addr, uint8_t value)
     gal.ram[(addr - 0x2000) & 0x1fff] = value;
 }
 
+/* Circus Charlie's DIP switches, as in MAME. Not offered: the cabinet and coin
+ * slot B. */
+static const char *const cc_lives_names[] = {"3", "4", "5", "7"};
+static const uint8_t cc_lives_values[] = {0x03, 0x02, 0x01, 0x00};
+static const char *const cc_bonus_names[] = {"20k 90k, every 70k", "30k 110k, every 80k"};
+static const uint8_t cc_bonus_values[] = {0x08, 0x00};
+static const char *const cc_difficulty_names[] = {"Easy", "Normal", "Hard", "Hardest"};
+static const uint8_t cc_difficulty_values[] = {0x60, 0x40, 0x20, 0x00};
+static const uint8_t cc_demo_values[] = {0x80, 0x00};
+static const gal_dip_t cc_dips[] = {
+    KONAMI_COINAGE_ROW(0),
+    GAL_DIP_ROW("Lives", "Lives at start", 1, 0x03, cc_lives_names, cc_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 1, 0x08, cc_bonus_names, cc_bonus_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 1, 0x60, cc_difficulty_names, cc_difficulty_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", 1, 0x80, gal_dip_off_on, cc_demo_values),
+};
+
 const gal_game_ops_t gal_circusc_ops = {
     .init = cc_init,
     .reset = cc_reset,
@@ -455,4 +475,6 @@ const gal_game_ops_t gal_circusc_ops = {
     .nhiscore = sizeof(cc_hiscore) / sizeof(cc_hiscore[0]),
     .hs_read = cc_hs_read,
     .hs_write = cc_hs_write,
+    .dips = cc_dips,
+    .ndips = sizeof(cc_dips) / sizeof(cc_dips[0]),
 };

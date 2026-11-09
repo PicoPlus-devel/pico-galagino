@@ -126,9 +126,17 @@ typedef struct
     uint8_t ndips;
 } gal_game_ops_t;
 
+/* Names and values shared by tables: OFF and ON; slot A of Konami's coinage
+ * (MAME's KONAMI_COINAGE, its free play included). */
+extern const char *const gal_dip_off_on[2];
+extern const char *const gal_konami_coin_names[16];
+extern const uint8_t gal_konami_coin_values[16];
+
 /* A row of a table of DIP switches. The help line is at most 40 characters. */
 #define GAL_DIP_ROW(label, text, port, mask, names, values) \
     {label, text ". Saving restarts game", port, mask, sizeof(values), names, values}
+#define KONAMI_COINAGE_ROW(port) \
+    {"Coinage", "Coins per credit. Saving restarts game", port, 0x0f, 16, gal_konami_coin_names, gal_konami_coin_values}
 
 typedef struct
 {
