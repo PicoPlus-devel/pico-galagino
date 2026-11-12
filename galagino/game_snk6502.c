@@ -274,8 +274,8 @@ static uint8_t sk_read(m6502_t *cpu, uint16_t addr)
                 v |= 0x08;
         }
         return v;
-    case 6: /* DSW: MAME's defaults */
-        return 0x00;
+    case 6: /* DSW */
+        return gal.dip[0];
     case 7: /* IN2: the starts; Vanguard: is music 0 silent */
         if (keys & GAL_BTN_START)
             v |= 0x80;
@@ -384,16 +384,19 @@ static int sk_init_common(uint8_t *const *regions, sk_var_t var, int rom_base, i
 
 static int vanguard_init(uint8_t *const *regions)
 {
+    gal.dip[0] = 0x00; /* the DSW: 1C1C, 3 lives (Nibbler: MAME's defaults) */
     return sk_init_common(regions, SK_VANGUARD, 0x4000, 0x8000, 0x1000);
 }
 
 static int fantasy_init(uint8_t *const *regions)
 {
+    gal.dip[0] = 0x00; /* the DSW: 1C1C, 3 lives (Nibbler: MAME's defaults) */
     return sk_init_common(regions, SK_FANTASY, 0x3000, 0x9000, 0x2000);
 }
 
 static int nibbler_init(uint8_t *const *regions)
 {
+    gal.dip[0] = 0x00; /* the DSW: 1C1C, 3 lives (Nibbler: MAME's defaults) */
     return sk_init_common(regions, SK_NIBBLER, 0x3000, 0x9000, 0x2000);
 }
 
@@ -511,13 +514,52 @@ static void sk_hs_write(uint16_t addr, uint8_t value)
 }
 
 #define N(a) (sizeof(a) / sizeof((a)[0]))
-#define SK_OPS(init_fn, hs)                                                                         \
+#define SK_OPS(init_fn, hs, ...)                                                                    \
     {                                                                                              \
         .init = init_fn, .reset = sk_reset, .run_slice = sk_run_slice, .prepare_frame = sk_prepare_frame, \
         .render_band = sk_render_band, .sound = sk_sound, .view_top = VIEW_TOP, .view_h = 256,      \
-        .hiscore = hs, .nhiscore = N(hs), .hs_read = sk_hs_read, .hs_write = sk_hs_write,           \
+        .hiscore = hs, .nhiscore = N(hs), .hs_read = sk_hs_read, .hs_write = sk_hs_write, __VA_ARGS__ \
     }
 
-const gal_game_ops_t gal_vanguard_ops = SK_OPS(vanguard_init, vanguard_hiscore);
-const gal_game_ops_t gal_fantasy_ops = SK_OPS(fantasy_init, fantasy_hiscore);
-const gal_game_ops_t gal_nibbler_ops = SK_OPS(nibbler_init, nibbler_hiscore);
+/* The DIP switches, as in MAME. Vanguard and Fantasy start at 0, as before.
+ * Their coinage is two switches: MAME's Coinage (0x0e) and its Coinage Bonus
+ * (0x40), which adds a credit per coin when off and per 2 coins when on (MAME's
+ * notes). They are one row here, named after the credits the game gives, as
+ * measured; 0x40 is left out, as it gives the same as 0x02. So the default,
+ * 0, is 1 coin for 2 credits. Not offered: the cabinet, and Nibbler's service
+ * mode and debug inputs. */
+static const char *const vg_coin_names[] = {"2 coins, 2 credits", "1 coin 1 credit, 2 for 3", "1 coin, 2 credits",
+                                            "1 coin 2 credits, 2 for 5", "1 coin, 3 credits", "1 coin 3 credits, 2 for 7",
+                                            "1 coin, 4 credits", "1 coin 6 credits, 2 for 13", "1 coin, 7 credits"};
+static const uint8_t vg_coin_values[] = {0x42, 0x02, 0x00, 0x48, 0x08, 0x44, 0x04, 0x4c, 0x0c};
+static const char *const vg_lives_names[] = {"3", "4", "5"};
+static const uint8_t vg_lives_values[] = {0x00, 0x10, 0x20};
+static const char *const sk_no_yes_names[] = {"No", "Yes"};
+static const uint8_t fa_continue_values[] = {0x80, 0x00};
+static const gal_dip_t vanguard_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x4e, vg_coin_names, vg_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x30, vg_lives_names, vg_lives_values),
+};
+static const gal_dip_t fantasy_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x4e, vg_coin_names, vg_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x30, vg_lives_names, vg_lives_values),
+    GAL_DIP_ROW("Continue", "Continue a game", 0, 0x80, sk_no_yes_names, fa_continue_values),
+};
+static const char *const nb_coin_names[] = {"2 coins, 1 credit", "2 coins 1 credit, 4 for 3", "1 coin, 1 credit",
+                                            "1 coin 1 credit, 2 for 3"};
+static const uint8_t nb_coin_values[] = {0x40, 0xc0, 0x00, 0x80};
+static const char *const nb_lives_names[] = {"3", "4", "5", "6"};
+static const uint8_t nb_lives_values[] = {0x00, 0x01, 0x02, 0x03};
+static const char *const nb_difficulty_names[] = {"Easy", "Hard"};
+static const uint8_t nb_difficulty_values[] = {0x00, 0x04};
+static const uint8_t nb_free_values[] = {0x00, 0x20};
+static const gal_dip_t nibbler_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0xc0, nb_coin_names, nb_coin_values),
+    GAL_DIP_ROW("Free play", "No coins needed", 0, 0x20, gal_dip_off_on, nb_free_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x03, nb_lives_names, nb_lives_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 0, 0x04, nb_difficulty_names, nb_difficulty_values),
+};
+
+const gal_game_ops_t gal_vanguard_ops = SK_OPS(vanguard_init, vanguard_hiscore, .dips = vanguard_dips, .ndips = N(vanguard_dips));
+const gal_game_ops_t gal_fantasy_ops = SK_OPS(fantasy_init, fantasy_hiscore, .dips = fantasy_dips, .ndips = N(fantasy_dips));
+const gal_game_ops_t gal_nibbler_ops = SK_OPS(nibbler_init, nibbler_hiscore, .dips = nibbler_dips, .ndips = N(nibbler_dips));

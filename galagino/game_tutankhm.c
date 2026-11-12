@@ -49,7 +49,9 @@ static uint8_t tk_read(m6809_state *s, uint16_t addr)
     case 0x8100:
         return tk.scroll;
     case 0x8160:
-        return 0x6b; /* DSW2, MAME's defaults: 3 lives, upright, bonus at 30000, normal, 1 flash bomb */
+        return gal.dip[1]; /* DSW2 */
+    case 0x81e0:
+        return gal.dip[0]; /* DSW1 */
     case 0x8180: /* IN0, active low */
         if (keys & GAL_BTN_COIN)
             v &= ~0x01;
@@ -72,7 +74,7 @@ static uint8_t tk_read(m6809_state *s, uint16_t addr)
         if (keys & GAL_BTN_EXTRA)
             v &= ~0x40; /* the flash bomb */
         return v;
-    default: /* 8120 the watchdog, 81c0 the second player, 81e0 DSW1 (1C1C) */
+    default: /* 8120 the watchdog, 81c0 the second player */
         return 0xff;
     }
 }
@@ -117,6 +119,9 @@ static void tk_write(m6809_state *s, uint16_t addr, uint8_t value)
 
 static int tk_init(uint8_t *const *regions)
 {
+    /* MAME's DSW1 and DSW2, its defaults: 1C1C; 3 lives, upright, bonus at 30000, normal, 1 flash bomb */
+    gal.dip[0] = 0xff;
+    gal.dip[1] = 0x6b;
     memset(&tk, 0, sizeof(tk));
     /* the bitmap, the program and the CPU to SRAM; the banks stay where the
      * set is, PSRAM or the flash cache */
@@ -252,6 +257,26 @@ static void tk_hs_write(uint16_t addr, uint8_t value)
     gal.ram[RAM_WORK + (addr & 0x7ff)] = value;
 }
 
+/* Tutankham's DIP switches, as in MAME. Not offered: the cabinet, coin slot B
+ * and the cheat of 255 lives. */
+static const char *const tk_lives_names[] = {"3", "4", "5"};
+static const uint8_t tk_lives_values[] = {0x03, 0x01, 0x02};
+static const char *const tk_bonus_names[] = {"30000", "40000"};
+static const uint8_t tk_bonus_values[] = {0x08, 0x00};
+static const char *const tk_difficulty_names[] = {"Easy", "Normal", "Hard", "Hardest"};
+static const uint8_t tk_difficulty_values[] = {0x30, 0x20, 0x10, 0x00};
+static const char *const tk_bomb_names[] = {"1 per life", "1 per game"};
+static const uint8_t tk_bomb_values[] = {0x40, 0x00};
+static const uint8_t tk_demo_values[] = {0x80, 0x00};
+static const gal_dip_t tk_dips[] = {
+    KONAMI_COINAGE_ROW(0),
+    GAL_DIP_ROW("Lives", "Lives at start", 1, 0x03, tk_lives_names, tk_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 1, 0x08, tk_bonus_names, tk_bonus_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 1, 0x30, tk_difficulty_names, tk_difficulty_values),
+    GAL_DIP_ROW("Flash bomb", "Flash bombs", 1, 0x40, tk_bomb_names, tk_bomb_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", 1, 0x80, gal_dip_off_on, tk_demo_values),
+};
+
 const gal_game_ops_t gal_tutankhm_ops = {
     .init = tk_init,
     .reset = tk_reset,
@@ -267,4 +292,6 @@ const gal_game_ops_t gal_tutankhm_ops = {
     .nhiscore = sizeof(tk_hiscore) / sizeof(tk_hiscore[0]),
     .hs_read = tk_hs_read,
     .hs_write = tk_hs_write,
+    .dips = tk_dips,
+    .ndips = sizeof(tk_dips) / sizeof(tk_dips[0]),
 };

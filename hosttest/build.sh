@@ -4,6 +4,7 @@
 #   hosttest/conv_check  - dumps the converted ROM data for hosttest/conv_check.py
 #   hosttest/zex_host    - the Z80 core on the ZEXDOC/ZEXALL instruction tests
 #   hosttest/flash_test  - the flash cache on its own, with fake games
+#   hosttest/dip_test    - the DIP switch file on a simulated FatFs, and the tables
 #
 # The core in galagino/ has no Pico dependencies; this compiles it for Linux
 # with ASan. Drop -fsanitize=address (and use -O2) for timing measurements:
@@ -82,4 +83,5 @@ gcc "${CFLAGS[@]}" -I hosttest hosttest/zex_host.c galagino/z80.c -o hosttest/ze
 gcc "${CFLAGS[@]}" -Dgal_games=fake_games -c galagino/gal_flash.c -o hosttest/flash_test_gal_flash.o
 gcc "${CFLAGS[@]}" hosttest/flash_test.c hosttest/flash_test_gal_flash.o third_party/miniz/miniz.c -o hosttest/flash_test
 rm -f hosttest/flash_test_gal_flash.o
-echo "built hosttest/gal_host, conv_check, zex_host and flash_test"
+gcc "${CFLAGS[@]}" -I . -I hosttest/fatfs_sim hosttest/dip_test.c dipfile.c "${CORE[@]}" -lm -o hosttest/dip_test
+echo "built hosttest/gal_host, conv_check, zex_host, flash_test and dip_test"

@@ -121,6 +121,7 @@ set(GALAGINO_CORE_SRC
     galagino/mooncresta_sound.c
     galagino/gal_flash.c
     galagino/gal_hiscore.c
+    dipfile.c
     galagino/i8048.c
     galagino/romload.c
     third_party/miniz/miniz.c
@@ -319,7 +320,6 @@ if(DEFINED PICO_DEFAULT_UART_TX_PIN)
     message(STATUS "Using PICO_DEFAULT_UART_TX_PIN: ${PICO_DEFAULT_UART_TX_PIN}")
     target_compile_definitions(${projectname} PRIVATE
         PICO_DEFAULT_UART_TX_PIN=${PICO_DEFAULT_UART_TX_PIN}
-        PICO_DEFAULT_UART=0
     )
 endif()
 if(DEFINED PICO_DEFAULT_UART_RX_PIN)

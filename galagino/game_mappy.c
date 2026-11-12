@@ -45,6 +45,7 @@ static struct
     int8_t *waves;
     uint8_t *ram;
     uint8_t main_irq, sub_irq, sound_enable, io_reset, sub_reset, scroll, mux;
+    uint8_t io_pending; /* the custom I/O chips run shortly after the vertical blank */
     gal_namcoio_t io[2];
 } mp;
 
@@ -99,8 +100,8 @@ static uint8_t io_in(int chip, int port)
         }
         return v;
     }
-    /* MAME's defaults: Mappy all off; Druaga 3 lives */
-    const uint8_t dsw1 = mp.druaga ? 0xfc : 0xff, dsw2 = 0xff, dsw0 = 0x0f;
+    /* MAME's DSW0-DSW2 */
+    const uint8_t dsw1 = gal.dip[1], dsw2 = gal.dip[2], dsw0 = gal.dip[0];
     switch (port)
     {
     case 0:
@@ -308,6 +309,7 @@ static int mp_init_common(uint8_t *const *regions, int druaga)
      * sprites through the second into the first 16 */
     uint16_t pal[32];
     mp_palette(regions[4], pal);
+    memset(mp.tile_mask, 0, 64); /* from the arena, as the previous game left it */
     for (int i = 0; i < 64 * 4; i++)
     {
         const uint8_t lut = regions[5][i] & 0x0f;
@@ -356,11 +358,19 @@ static int mp_init_common(uint8_t *const *regions, int druaga)
 
 static int mappy_init(uint8_t *const *regions)
 {
+    /* MAME's DSW0-DSW2, its defaults: all off */
+    gal.dip[0] = 0x0f;
+    gal.dip[1] = 0xff;
+    gal.dip[2] = 0xff;
     return mp_init_common(regions, 0);
 }
 
 static int druaga_init(uint8_t *const *regions)
 {
+    /* MAME's DSW0-DSW2, as before: DSW1 0xfc */
+    gal.dip[0] = 0x0f;
+    gal.dip[1] = 0xfc;
+    gal.dip[2] = 0xff;
     return mp_init_common(regions, 1);
 }
 
@@ -371,6 +381,7 @@ static void mp_reset(void)
     /* the latch is clear at power-on: the sub CPU and the I/O chips held in
      * reset */
     mp.sub_reset = mp.io_reset = 1;
+    mp.io_pending = 0;
     io_reset_chips();
     m6809_reset(mp.cpu);
     mp.cpu->icount = 0;
@@ -379,12 +390,38 @@ static void mp_reset(void)
     gal_wsg15_reset();
 }
 
+/* MAME runs the custom I/O chips 50 us after the vertical blank, "to give the
+ * CPU a tiny bit of time to write the command": the interrupt handler writes the
+ * next command first. Run at the blank itself, a chip would repeat the last
+ * command with RAM the game has moved on from (Mappy's coinage, set and then
+ * overwritten). */
+#define IO_DELAY 77 /* 50 us at 1.536 MHz */
+
+static void run_chips(void)
+{
+    gal_namcoio_run_58xx(&mp.io[0]);
+    if (mp.druaga)
+        gal_namcoio_run_56xx(&mp.io[1]);
+    else
+        gal_namcoio_run_58xx(&mp.io[1]);
+}
+
 static void mp_run_slice(int q)
 {
     for (int i = 0; i < STEPS / 4; i++)
     {
         const int step = q * (STEPS / 4) + i;
-        const int len = (step + 1) * CYCLES_PER_FRAME / STEPS - step * CYCLES_PER_FRAME / STEPS;
+        int len = (step + 1) * CYCLES_PER_FRAME / STEPS - step * CYCLES_PER_FRAME / STEPS;
+        if (mp.io_pending)
+        {
+            const int d = len < IO_DELAY ? len : IO_DELAY;
+            m6809_run(mp.cpu, d);
+            if (!mp.sub_reset)
+                m6809_run(mp.sub, d);
+            len -= d;
+            mp.io_pending = 0;
+            run_chips();
+        }
         m6809_run(mp.cpu, len);
         if (!mp.sub_reset)
             m6809_run(mp.sub, len);
@@ -395,14 +432,7 @@ static void mp_run_slice(int q)
             m6809_irq(mp.cpu);
         if (mp.sub_irq && !mp.sub_reset)
             m6809_irq(mp.sub);
-        if (!mp.io_reset)
-        {
-            gal_namcoio_run_58xx(&mp.io[0]);
-            if (mp.druaga)
-                gal_namcoio_run_56xx(&mp.io[1]);
-            else
-                gal_namcoio_run_58xx(&mp.io[1]);
-        }
+        mp.io_pending = !mp.io_reset; /* as MAME: scheduled when not held in reset */
     }
 }
 
@@ -561,6 +591,32 @@ static void mp_hs_write(uint16_t addr, uint8_t value)
     mp.ram[addr] = value;
 }
 
+/* The DIP switches, as in MAME: DSW0-DSW2 in gal.dip[0-2], read by the 58XX in
+ * halves. Not offered: the cabinet, rack test, freeze, service mode, coin slot
+ * B, and Mappy's bonus life, whose switches mean something else with 5 lives. */
+static const char *const mp_coin_names[] = {"3 coins, 1 credit",  "2 coins, 1 credit", "3 coins, 2 credits", "1 coin, 1 credit",
+                                            "2 coins, 3 credits", "1 coin, 2 credits", "1 coin, 3 credits",  "1 coin, 6 credits"};
+static const uint8_t mp_coin_values[] = {0x01, 0x03, 0x00, 0x07, 0x02, 0x06, 0x05, 0x04};
+static const char *const mp_lives_names[] = {"1", "2", "3", "5"};
+static const uint8_t mp_lives_values[] = {0x40, 0x00, 0xc0, 0x80};
+static const char *const mp_rank_names[] = {"Rank A", "Rank B", "Rank C", "Rank D", "Rank E", "Rank F", "Rank G", "Rank H"};
+static const uint8_t mp_rank_values[] = {0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01, 0x00};
+static const uint8_t mp_demo_values[] = {0x00, 0x20};
+static const gal_dip_t mappy_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 2, 0x07, mp_coin_names, mp_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 2, 0xc0, mp_lives_names, mp_lives_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 1, 0x07, mp_rank_names, mp_rank_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", 1, 0x20, gal_dip_off_on, mp_demo_values),
+};
+static const char *const td_coin_names[] = {"3 coins, 1 credit", "2 coins, 1 credit", "1 coin, 1 credit", "1 coin, 2 credits"};
+static const uint8_t td_coin_values[] = {0x00, 0x08, 0x0c, 0x04};
+static const char *const td_lives_names[] = {"1", "2", "3", "5"};
+static const uint8_t td_lives_values[] = {0x01, 0x02, 0x03, 0x00};
+static const gal_dip_t druaga_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 1, 0x0c, td_coin_names, td_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 1, 0x03, td_lives_names, td_lives_values),
+};
+
 const gal_game_ops_t gal_mappy_ops = {
     .init = mappy_init,
     .reset = mp_reset,
@@ -574,6 +630,8 @@ const gal_game_ops_t gal_mappy_ops = {
     .nhiscore = sizeof(mappy_hiscore) / sizeof(mappy_hiscore[0]),
     .hs_read = mp_hs_read,
     .hs_write = mp_hs_write,
+    .dips = mappy_dips,
+    .ndips = sizeof(mappy_dips) / sizeof(mappy_dips[0]),
 };
 
 const gal_game_ops_t gal_todruaga_ops = {
@@ -594,4 +652,6 @@ const gal_game_ops_t gal_todruaga_ops = {
     .nhiscore = sizeof(druaga_hiscore) / sizeof(druaga_hiscore[0]),
     .hs_read = mp_hs_read,
     .hs_write = mp_hs_write,
+    .dips = druaga_dips,
+    .ndips = sizeof(druaga_dips) / sizeof(druaga_dips[0]),
 };

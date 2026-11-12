@@ -55,6 +55,7 @@ sb-*
 hosttest/gal_host
 hosttest/zex_host
 hosttest/flash_test
+hosttest/dip_test
 hosttest/conv_check
 hosttest/out*/
 hosttest/**/*.ppm

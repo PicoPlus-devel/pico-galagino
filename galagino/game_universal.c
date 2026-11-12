@@ -55,7 +55,6 @@ static struct
     uint16_t *tile_color; /* [colours][4] */
     uint16_t *spr_color;  /* [16][4] */
     uint16_t back;        /* the colour behind everything */
-    uint8_t dsw0, dsw1;
     uint8_t scroll_x, scroll_y; /* Mr. Do!'s back layer */
     gal_sn_t sn[2];
     int run_base, run_len;
@@ -108,9 +107,9 @@ static uint8_t lb_read(z80_t *cpu, uint16_t addr)
          * bit 6 (active low) and bit 7 (active high) */
         return (ub_stick() & 0x3f) | (in_vblank(cpu) ? 0x80 : 0x40);
     case 0x9002:
-        return ub.dsw0;
+        return gal.dip[0];
     case 0x9003:
-        return ub.dsw1;
+        return gal.dip[1];
     case 0xe000:
         return 0xff;
     default:
@@ -139,9 +138,9 @@ static uint8_t do_read(z80_t *cpu, uint16_t addr)
     case 0xa001:
         return (gal.buttons & GAL_BTN_COIN) ? 0xbf : 0xff;
     case 0xa002:
-        return ub.dsw0;
+        return gal.dip[0];
     case 0xa003:
-        return ub.dsw1;
+        return gal.dip[1];
     default:
         return 0;
     }
@@ -292,8 +291,8 @@ static int lb_init(uint8_t *const *regions)
     gal_conv_sprites16(regions[2], &lb_sprites, 128, GAL_ROT270, ub.sprites);
     gal_conv_tiles8(regions[2], &lb_small, 512, GAL_ROT270, ub.small);
     lb_palette(regions[3], regions[4]);
-    ub.dsw0 = 0xdf; /* MAME's defaults: easy, 10 letters, upright, 3 lives */
-    ub.dsw1 = 0xff; /* 1C1C */
+    gal.dip[0] = 0xdf; /* MAME's defaults: easy, 10 letters, upright, 3 lives */
+    gal.dip[1] = 0xff; /* 1C1C */
 
     z80_t *cpu = &gal.cpu[0];
     map(cpu, 0x00, 0x60, ub.rom, 0);
@@ -326,8 +325,8 @@ static int do_init(uint8_t *const *regions)
     gal_conv_tiles8(regions[2], &ub_chars, 512, GAL_ROT270, ub.tiles[1]);
     gal_conv_sprites16(regions[3], &do_sprites, 128, GAL_ROT270, ub.sprites);
     do_palette(regions[4], regions[5]);
-    ub.dsw0 = 0xdf; /* MAME's defaults: easy, upright, 3 lives */
-    ub.dsw1 = 0xff; /* 1C1C */
+    gal.dip[0] = 0xdf; /* MAME's defaults: easy, upright, 3 lives */
+    gal.dip[1] = 0xff; /* 1C1C */
 
     z80_t *cpu = &gal.cpu[0];
     map(cpu, 0x00, 0x80, ub.rom, 0);
@@ -574,12 +573,52 @@ static const gal_hiscore_region_t do_hiscore[] = {
 };
 
 #define N(a) (sizeof(a) / sizeof((a)[0]))
-#define UB_OPS(init_fn, hs)                                                                         \
+#define UB_OPS(init_fn, hs, ...)                                                                    \
     {                                                                                              \
         .init = init_fn, .reset = ub_reset, .run_slice = ub_run_slice, .prepare_frame = ub_prepare_frame, \
         .render_band = ub_render_band, .sound = ub_sound, .view_top = VIEW_TOP, .view_h = VIEW_H,  \
-        .hiscore = hs, .nhiscore = N(hs),                                                          \
+        .hiscore = hs, .nhiscore = N(hs), __VA_ARGS__                                              \
     }
 
-const gal_game_ops_t gal_ladybug_ops = UB_OPS(lb_init, lb_hiscore);
-const gal_game_ops_t gal_mrdo_ops = UB_OPS(do_init, do_hiscore);
+/* The DIP switches, as in MAME: DSW0 (Mr. Do!: DSW1) in gal.dip[0], the coinage
+ * in gal.dip[1]. Both start at MAME's defaults. The coin button is the left slot,
+ * Coin A. Not offered: the cabinet, rack test, freeze and Coin B. */
+static const char *const ub_coin_names[] = {"4 coins, 1 credit",  "3 coins, 1 credit", "2 coins, 1 credit", "3 coins, 2 credits",
+                                            "1 coin, 1 credit",   "2 coins, 3 credits", "1 coin, 2 credits", "1 coin, 3 credits",
+                                            "1 coin, 4 credits",  "1 coin, 5 credits", "Free play"};
+static const uint8_t ub_coin_values[] = {0x60, 0x80, 0xa0, 0x70, 0xf0, 0x90, 0xe0, 0xd0, 0xc0, 0xb0, 0x00};
+static const char *const ub_difficulty_names[] = {"Easy", "Medium", "Hard", "Hardest"};
+static const uint8_t ub_difficulty_values[] = {0x03, 0x02, 0x01, 0x00};
+static const char *const ub_easy_hard_names[] = {"Easy", "Hard"};
+
+/* Lady Bug: Coin A without free play, which is a switch of its own */
+static const uint8_t lb_coin_values[] = {0x60, 0x80, 0xa0, 0x70, 0xf0, 0x90, 0xe0, 0xd0, 0xc0, 0xb0};
+static const char *const lb_lives_names[] = {"3", "5"};
+static const uint8_t lb_lives_values[] = {0x80, 0x00};
+static const char *const lb_names_names[] = {"3 letters", "10 letters"};
+static const uint8_t lb_names_values[] = {0x00, 0x04};
+static const char *const lb_free_names[] = {"OFF", "ON"};
+static const uint8_t lb_free_values[] = {0x40, 0x00};
+static const gal_dip_t lb_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 1, 0xf0, ub_coin_names, lb_coin_values),
+    GAL_DIP_ROW("Free play", "No coins needed", 0, 0x40, lb_free_names, lb_free_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x80, lb_lives_names, lb_lives_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 0, 0x03, ub_difficulty_names, ub_difficulty_values),
+    GAL_DIP_ROW("High score names", "Letters per name", 0, 0x04, lb_names_names, lb_names_values),
+};
+
+/* Mr. Do! */
+static const char *const do_lives_names[] = {"2", "3", "4", "5"};
+static const uint8_t do_lives_values[] = {0x00, 0xc0, 0x80, 0x40};
+static const uint8_t do_special_values[] = {0x08, 0x00};
+static const uint8_t do_extra_values[] = {0x10, 0x00};
+static const gal_dip_t do_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 1, 0xf0, ub_coin_names, ub_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0xc0, do_lives_names, do_lives_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 0, 0x03, ub_difficulty_names, ub_difficulty_values),
+    GAL_DIP_ROW("Special", "Getting a Special", 0, 0x08, ub_easy_hard_names, do_special_values),
+    GAL_DIP_ROW("Extra", "Getting EXTRA", 0, 0x10, ub_easy_hard_names, do_extra_values),
+};
+
+const gal_game_ops_t gal_ladybug_ops = UB_OPS(lb_init, lb_hiscore, .dips = lb_dips, .ndips = N(lb_dips));
+const gal_game_ops_t gal_mrdo_ops = UB_OPS(do_init, do_hiscore, .dips = do_dips, .ndips = N(do_dips));

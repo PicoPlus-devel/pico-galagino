@@ -43,7 +43,7 @@ static struct
     int namco_busy;
     uint8_t cs_ctrl;
     int nmi_cnt;
-    int coincred_mode;
+    gal_51xx_coinage_t coinage;
     uint16_t prev_mask;
     uint8_t fire_timer;
 
@@ -57,15 +57,21 @@ static struct
 
 /* --- Memory map ------------------------------------------------------------ */
 
+/* MAME's DIP switch ports, in gal.dip */
+#define GG_DSWA 0
+#define GG_DSWB 1
+#define GG_REV8(b)                                                                                 \
+    ((uint8_t)((((b) & 0x01) << 7) | (((b) & 0x02) << 5) | (((b) & 0x04) << 3) | (((b) & 0x08) << 1) | \
+               (((b) & 0x10) >> 1) | (((b) & 0x20) >> 3) | (((b) & 0x40) >> 5) | (((b) & 0x80) >> 7)))
+
 static uint8_t GAL_HOT(gg_read)(z80_t *cpu, uint16_t addr)
 {
     (void)cpu;
     /* the DIP switches, one bit of each per address */
     if ((addr & 0xfff8) == 0x6800)
     {
-        const uint8_t dip_a = (GALAGA_DIPA & (0x80 >> (addr & 7))) ? 0 : 1;
-        const uint8_t dip_b = (GALAGA_DIPB & (0x80 >> (addr & 7))) ? 0 : 2;
-        return dip_a + dip_b;
+        const int bit = addr & 7;
+        return (uint8_t)(((gal.dip[GG_DSWB] >> bit) & 1) | (((gal.dip[GG_DSWA] >> bit) & 1) << 1));
     }
 
     /* 7100 namco_06xx ctrl, 7000 data */
@@ -90,6 +96,11 @@ static uint8_t GAL_HOT(gg_read)(z80_t *cpu, uint16_t addr)
                 /* byte 0 is credit in BCD, byte 1 and 2: ...FLURD */
                 uint8_t mapb1[3] = {(uint8_t)(16 * (gg.credit / 10) + gg.credit % 10), 0xff, 0xff};
                 const uint16_t keymask = gal.buttons;
+
+                /* free play: credits for ever, once the last count was read,
+                 * as the game starts when it sees that count go down */
+                if (!gg.coinage.coins_per_credit && gg.namco_cnt == 0)
+                    gg.credit = 100;
 
                 /* report directions directly */
                 if (keymask & GAL_BTN_LEFT)
@@ -118,7 +129,7 @@ static uint8_t GAL_HOT(gg_read)(z80_t *cpu, uint16_t addr)
                 if ((keymask & GAL_BTN_START2) && !(gg.prev_mask & GAL_BTN_START2) && gg.credit >= 2)
                     gg.credit -= 2;
                 if ((keymask & GAL_BTN_COIN) && !(gg.prev_mask & GAL_BTN_COIN) && gg.credit < 99)
-                    gg.credit += 1;
+                    gg.credit = gal_51xx_coin(&gg.coinage, gg.credit);
 
                 if (gg.namco_cnt > 2)
                     return 0xff;
@@ -159,15 +170,11 @@ static void GAL_HOT(gg_write)(z80_t *cpu, uint16_t addr, uint8_t value)
         }
         else if (gg.cs_ctrl & 1) /* 7000 */
         {
-            if (gg.coincred_mode)
-            {
-                gg.coincred_mode--;
+            if (gal_51xx_write(&gg.coinage, value))
                 return;
-            }
             switch (value)
             {
             case 1: /* coin and credit mode for both players follow (four bytes) */
-                gg.coincred_mode = 4;
                 break;
             case 2:
                 gg.credit_mode = 1;
@@ -264,6 +271,10 @@ static void gg_patch_boot(uint8_t *rom)
 
 static int gg_init(uint8_t *const *regions)
 {
+    /* Galagino's settings: its macros are MAME's ports, inverted and in reverse
+     * bit order. Unlike MAME's defaults, demo sounds are off. */
+    gal.dip[GG_DSWA] = GG_REV8(~GALAGA_DIPB);
+    gal.dip[GG_DSWB] = GG_REV8(~GALAGA_DIPA);
     gg_patch_boot(regions[0]);
     gg.rom[0] = regions[0];
     gg.rom[1] = regions[1];
@@ -331,7 +342,7 @@ static void gg_reset(void)
     gg.namco_busy = 0;
     gg.cs_ctrl = 0;
     gg.nmi_cnt = 0;
-    gg.coincred_mode = 0;
+    gal_51xx_reset(&gg.coinage);
     gg.prev_mask = 0;
     gg.fire_timer = 0;
     memset(gg.irq_enable, 0, sizeof(gg.irq_enable));
@@ -515,6 +526,25 @@ static const gal_hiscore_region_t gg_hiscore[] = {
     {0x83ed, 6, 0x00, 0x24},    /* video RAM: the high score shown */
 };
 
+/* Galaga's DIP switches, as in MAME. The bonus life is not offered: its bits
+ * mean something else with 5 lives, and a row's names are fixed. */
+static const char *const gg_coin_names[] = {"4 coins, 1 credit", "3 coins, 1 credit", "2 coins, 1 credit",  "1 coin, 1 credit",
+                                            "2 coins, 3 credits", "1 coin, 2 credits", "1 coin, 3 credits", "Free play"};
+static const uint8_t gg_coin_values[] = {0x04, 0x02, 0x06, 0x07, 0x01, 0x03, 0x05, 0x00};
+static const char *const gg_lives_names[] = {"2", "3", "4", "5"};
+static const uint8_t gg_lives_values[] = {0x00, 0x80, 0x40, 0xc0};
+static const char *const gg_difficulty_names[] = {"Easy", "Medium", "Hard", "Hardest"};
+static const uint8_t gg_difficulty_values[] = {0x03, 0x00, 0x01, 0x02};
+static const char *const gg_off_on_names[] = {"OFF", "ON"};
+static const uint8_t gg_demo_values[] = {0x08, 0x00};
+
+static const gal_dip_t gg_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", GG_DSWB, 0x07, gg_coin_names, gg_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", GG_DSWB, 0xc0, gg_lives_names, gg_lives_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", GG_DSWA, 0x03, gg_difficulty_names, gg_difficulty_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", GG_DSWA, 0x08, gg_off_on_names, gg_demo_values),
+};
+
 const gal_game_ops_t gal_galaga_ops = {
     .init = gg_init,
     .reset = gg_reset,
@@ -526,6 +556,8 @@ const gal_game_ops_t gal_galaga_ops = {
     .view_h = GAL_H,
     .hiscore = gg_hiscore,
     .nhiscore = sizeof(gg_hiscore) / sizeof(gg_hiscore[0]),
+    .dips = gg_dips,
+    .ndips = sizeof(gg_dips) / sizeof(gg_dips[0]),
 };
 
 #ifdef GAL_CONV_CHECK

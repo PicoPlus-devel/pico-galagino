@@ -105,9 +105,11 @@ static uint8_t sf_read(z80_t *cpu, uint16_t addr)
             v |= 0x08;
         return v;
     case 0xd004:
-        return 0xc0; /* MAME's defaults: 1C1C, 3 lives, upright, demo sounds */
+        return gal.dip[0]; /* DSW1 */
+    case 0xd005:
+        return gal.dip[1]; /* DSW2 */
     default:
-        return 0; /* d005: bonus at 50k, 200k and 500k, normal */
+        return 0;
     }
 }
 
@@ -222,6 +224,9 @@ static void snd_interrupt(void)
 
 static int sf_init(uint8_t *const *regions)
 {
+    /* MAME's DSW1 and DSW2, its defaults: 1C1C, 3 lives, upright, demo sounds; bonus at 50k, easiest */
+    gal.dip[0] = 0xc0;
+    gal.dip[1] = 0x00;
     memset(&sf, 0, sizeof(sf));
     /* the programs, the characters and the layers' RAM to SRAM */
     sf.rom = (uint8_t *)gal_fast_alloc(0x8000);
@@ -544,6 +549,26 @@ static const gal_hiscore_region_t sf_hiscore[] = {
     {0x91e1, 1, 0x18, 0x18}, {0x91c1, 1, 0x21, 0x21}, {0x91a1, 1, 0x18, 0x18}, {0x9181, 1, 0x18, 0x18},
 };
 
+/* Star Force's DIP switches, as in MAME. Not offered: the cabinet, coin slot B,
+ * the unused difficulties and the unknown switches. */
+static const char *const sf_coin_names[] = {"2 coins, 1 credit", "1 coin, 1 credit", "1 coin, 2 credits", "1 coin, 3 credits"};
+static const uint8_t sf_coin_values[] = {0x01, 0x00, 0x02, 0x03};
+static const char *const sf_lives_names[] = {"2", "3", "4", "5"};
+static const uint8_t sf_lives_values[] = {0x30, 0x00, 0x10, 0x20};
+static const uint8_t sf_demo_values[] = {0x00, 0x80};
+static const char *const sf_bonus_names[] = {"50k", "100k", "50k and 200k", "100k and 300k", "50k only", "100k only",
+                                             "200k only", "None"};
+static const uint8_t sf_bonus_values[] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+static const char *const sf_difficulty_names[] = {"Easiest", "Easy", "Medium", "Difficult", "Hard", "Hardest"};
+static const uint8_t sf_difficulty_values[] = {0x00, 0x08, 0x10, 0x18, 0x20, 0x28};
+static const gal_dip_t sf_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x03, sf_coin_names, sf_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x30, sf_lives_names, sf_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 1, 0x07, sf_bonus_names, sf_bonus_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 1, 0x38, sf_difficulty_names, sf_difficulty_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", 0, 0x80, gal_dip_off_on, sf_demo_values),
+};
+
 const gal_game_ops_t gal_starforc_ops = {
     .init = sf_init,
     .reset = sf_reset,
@@ -560,4 +585,6 @@ const gal_game_ops_t gal_starforc_ops = {
     .derive = sf_derive,
     .hiscore = sf_hiscore,
     .nhiscore = sizeof(sf_hiscore) / sizeof(sf_hiscore[0]),
+    .dips = sf_dips,
+    .ndips = sizeof(sf_dips) / sizeof(sf_dips[0]),
 };

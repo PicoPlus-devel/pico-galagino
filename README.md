@@ -294,12 +294,14 @@ All the games run on every board. The converted graphics of 1942 take about 230 
 | 13 | Murmulator M2 | HSTX | `picoGalagino_MurmulatorM2_arm.uf2` |
 | 14 | Adafruit Feather RP2350 with HSTX Port and TLV320DAC3100 I2S DAC | HSTX | `picoGalagino_AdafruitFeatherRP2350_TLV320DAC3100_arm_piousb.uf2` |
 | 15 | Olimex RP2040-PICO-PC with a Raspberry Pi Pico 2 | HSTX | `picoGalagino_OlimexPicoPC_arm.uf2` |
+| 17 | Pico Computer 3 | HSTX | `picoGalagino_PicoComputer3_arm.uf2` |
+| 18 | PCB for the Waveshare RP2350-PiZero | HSTX | `picoGalagino_WaveShareRP2350PiZeroLiuPCB_arm_piousb.uf2` |
 
 With *Tate mode* off, every line of the game is shown, scaled to the height of the screen. Boards with HSTX output mix two lines of the picture where a screen line falls between them; boards with PicoDVI output show each line of the picture on one or two screen lines. See [Display and tate mode](#display-and-tate-mode).
 
 For wiring and assembly instructions, see the setup sections of the [pico-infonesPlus README](https://github.com/PicoPlus-devel/pico-infonesPlus#setup). To flash a board, hold BOOTSEL while connecting it over USB, then copy the `.uf2` file onto the USB drive that appears.
 
-Audio is sent over HDMI. Boards with an I2S DAC (configurations 8, 13 and 14) can use it instead through the *External Audio* setting; on the Fruit Jam, plugging in headphones selects it automatically. Configuration 15 also plays the sound on its PWM audio jack.
+Audio is sent over HDMI. Boards with an I2S DAC (configurations 8, 13, 14, 17 and 18) can use it instead through the *External Audio* setting; on the Fruit Jam, plugging in headphones selects it automatically. Configuration 15 also plays the sound on its PWM audio jack.
 
 ***
 
@@ -328,7 +330,7 @@ Bomb Jack checks its ROMs and RAM for about 20 seconds after it starts, Xevious 
 
 USB game controllers, NES and SNES controllers on the GPIO ports and the Wii Classic controller are supported, as in the other emulators of this family. A and B both press the fire button. Each has its own rapid fire setting, so one of them can fire single shots and the other fire automatically. The coin is inserted when SELECT is released, and only when no other button was pressed while it was held, so opening the settings menu does not insert a coin. While START is held, A switches the frame rate display (top left, in the border) on or off instead of firing.
 
-The DIP switches have Galagino's settings for its six games: an upright cabinet, 1 coin for 1 credit, three lives (Pac-Man, Galaga, Donkey Kong, Frogger, Dig Dug) or two (1942), and the default bonus lives. The other games have MAME's default settings, which are much the same: 1 coin for 1 credit and three lives.
+The DIP switches have Galagino's settings for its six games: an upright cabinet, 1 coin for 1 credit, three lives (Pac-Man, Galaga, Donkey Kong, Frogger, Dig Dug) or two (1942), and the default bonus lives. The other games have MAME's default settings, which are much the same: 1 coin for 1 credit and three lives. The exceptions are Gyruss, which starts with five lives at difficulty 2 of 8, as in GalaginoPlus, The Tower of Druaga, which starts with five lives, and Vanguard and Fantasy, which give 2 credits per coin. The DIP switches of every game can be changed in the settings menu; see [DIP switches](#dip-switches).
 
 ***
 
@@ -361,15 +363,107 @@ Both pictures appear upright once the monitor is turned as described in the tabl
 
 ## Settings menu
 
-**SELECT + START** opens the settings menu. Besides *Tate mode*, it offers the screen mode with or without scanlines (on boards with HSTX output; PicoDVI boards have no scanlines), the FPS overlay, audio on/off, rapid fire on A and on B, the external audio output, the Fruit Jam volume and VU meter, the controller test, BOOTSEL mode and USB drive mode. In a game it also offers *Reset game*, and *Quit game*, which returns to the game menu. When started from pico-bootLoader, it also offers *Return to emulator selection*.
+**SELECT + START** opens the settings menu. Besides *Tate mode*, it offers the screen mode with or without scanlines (on boards with HSTX output; PicoDVI boards have no scanlines), the FPS overlay, audio on/off, rapid fire on A and on B, the external audio output, the Fruit Jam volume and VU meter, the controller test, BOOTSEL mode and USB drive mode. In a game it also offers *Reset game*, *Quit game*, which returns to the game menu, and the game's [DIP switches](#dip-switches). When started from pico-bootLoader, it also offers *Return to boot loader*. On boards with PSRAM it also offers *Disable PSRAM*.
 
 The settings are stored on the SD card in `/settings_ARC.dat`, a file shared by all arcade games of this family. The games have no save states.
+
+**Disable PSRAM** is a testing aid: set to **YES** and saved, it restarts the board, which then runs as a board without PSRAM, so the large games are copied into flash the first time they are started. Set it to **NO** to return to normal. The setting is stored in the flash of the board, not on the SD card, and a firmware update can reset it to **NO**.
+
+### DIP switches
+
+While a game is running, the settings menu also lists the DIP switches of that game, at most eight rows. They do not appear in the game menu.
+
+- **SAVE** with a changed switch restarts the game, as the game reads its switches when it starts. The game in progress is lost; the high score table is kept. **SAVE** without a changed switch does not restart the game.
+- **CANCEL** leaves the switches as they were.
+- **DEFAULT** selects the values shown in bold below, which take effect when saved. These are the settings the game has when nothing was changed. In Galaga and Dig Dug, demo sounds are off by default, as in Galagino; MAME's default is on.
+
+| Setting | Pac-Man | Galaga | Donkey Kong | Dig Dug |
+| --- | --- | --- | --- | --- |
+| Coinage (coins for credits) | 2 for 1, **1 for 1**, 1 for 2, free play | 4 for 1, 3 for 1, 2 for 1, **1 for 1**, 2 for 3, 1 for 2, 1 for 3, free play | 5 for 1, 4 for 1, 3 for 1, 2 for 1, **1 for 1**, 1 for 2, 1 for 3, 1 for 4 | 2 for 1, **1 for 1**, 2 for 3, 1 for 2 |
+| Lives | 1, 2, **3**, 5 | 2, **3**, 4, 5 | **3**, 4, 5, 6 | 1, 2, **3**, 5 |
+| Bonus life | **10000**, 15000, 20000, none | Not available | **7000**, 10000, 15000, 20000 | Not available |
+| Difficulty | **Normal**, hard | **Easy**, medium, hard, hardest | Not available | **Easy**, medium, hard, hardest |
+| Demo sounds | Not available | **Off**, on | Not available | **Off**, on |
+| Ghost names | **Normal**, alternate | Not available | Not available | Not available |
+| Continue | Not available | Not available | Not available | No, **yes** |
+
+The other games of the Pac-Man board, and Donkey Kong Jr.:
+
+| Game | Coinage (coins for credits) | Lives | Other settings |
+| --- | --- | --- | --- |
+| Ms. Pac-Man, Ali Baba | 2 for 1, **1 for 1**, 1 for 2, free play | 1, 2, **3**, 5 | Bonus life: **10000**, 15000, 20000, none. Difficulty: **normal**, hard |
+| Crush Roller | 2 for 1, **1 for 1**, 1 for 2, free play | **3**, 4, 5, 6 | First maze: **easy**, hard. Teleport holes: **off**, on |
+| Eyes | 2 for 1, **1 for 1**, 1 for 2, free play | 2, **3**, 4, 5 | Bonus life: **50000**, 75000, 100000, 125000 |
+| Mr. TNT | 2 for 1, **1 for 1**, 1 for 2, free play | 2, **3**, 4, 5 | Bonus life: **75000**, 100000, 125000, 150000 |
+| Lizard Wizard | 2 for 1, **1 for 1**, 1 for 2, free play | 2, **3**, 4, 5 | Bonus life: **75000**, 100000, 125000, 150000. Difficulty: **normal**, hard |
+| The Glob | Not available | **3**, 4, 5, 6 | Difficulty: eight steps from **easiest** to hardest. Demo sounds: off, **on** |
+| Pengo | Sixteen choices from 4 for 1 to 1 for 6, **1 for 1** among them; some give extra credits for more coins, for example 2 for 1 and 5 for 3 | 2, **3**, 4, 5 | Bonus life: **30000**, 50000. Difficulty: easy, **medium**, hard, hardest. Demo sounds: off, **on** |
+| Van-Van Car | 2 for 1, **1 for 1**, 1 for 2, 1 for 3 | **3**, 4, 5, 6 | Bonus life: 20000 and 100000, 40000 and 140000, 70000 and 200000, **none** |
+| Donkey Kong Jr. | 5 for 1, 4 for 1, 3 for 1, 2 for 1, **1 for 1**, 1 for 2, 1 for 3, 1 for 4 | **3**, 4, 5, 6 | Bonus life: **10000**, 15000, 20000, 25000 |
+
+The games of the Galaxian board, Frogger, Lady Bug, Mr. Do! and Phoenix:
+
+| Game | Coinage (coins for credits) | Lives | Other settings |
+| --- | --- | --- | --- |
+| Galaxian | 2 for 1, **1 for 1**, 1 for 2, free play | 2, **3** | Bonus life: **7000**, 10000, 12000, 20000 |
+| Moon Cresta | 4 for 1, 3 for 1, 2 for 1, **1 for 1** | Not available | Free play: **off**, on. Bonus life: **30000**, 50000. Language: **English**, Japanese |
+| Scramble | **1 for 1**, 1 for 2, 1 for 3, 1 for 4 | **3**, 4, 5 | None |
+| Super Cobra | 2 for 1, 4 for 3, **1 for 1**, 99 credits | **3**, 4 | Continue: no, **4 times** |
+| Turtles | **1 for 1**, 1 for 2, 1 for 3, 1 for 4 | 3, **4**, 5 | None |
+| Amidar | Sixteen choices from 4 for 1 to 1 for 7, **1 for 1** and free play among them | **3**, 4, 5 | Bonus life: **30000 and 70000**, 50000 and 80000. Demo sounds: off, **on** |
+| Anteater | **1 for 1**, 1 for 2, 1 for 3, 1 for 4 | **3**, 5 | Demo sounds: off, **on** |
+| Bagman | Not available | 2, **3**, 4, 5 | Difficulty: **easy**, medium, hard, hardest. Language: **English**, French |
+| Frogger | **1 for 1**, 2 for 1 | **3**, 5, 7 | None |
+| Lady Bug | Ten choices from 4 for 1 to 1 for 5, **1 for 1** among them | **3**, 5 | Free play: **off**, on. Difficulty: **easy**, medium, hard, hardest. High score names: 3 letters, **10 letters** |
+| Mr. Do! | Ten choices from 4 for 1 to 1 for 5, **1 for 1** among them, and free play | 2, **3**, 4, 5 | Difficulty: **easy**, medium, hard, hardest. Special and Extra: **easy**, hard |
+| Phoenix | 2 for 1, **1 for 1** | **3**, 4, 5, 6 | Bonus life: **3000 and 30000**, 4000 and 40000, 5000 and 50000, 6000 and 60000 |
+
+The Konami, Tecmo and Data East games:
+
+| Game | Coinage (coins for credits) | Lives | Other settings |
+| --- | --- | --- | --- |
+| Time Pilot | Sixteen choices from 4 for 1 to 1 for 7, **1 for 1** and free play among them | **3**, 4, 5 | Bonus life: **10000 and 50000**, 20000 and 60000. Difficulty: eight steps from easiest to hardest, **4** by default. Demo sounds: off, **on** |
+| Pooyan | The same sixteen choices | **3**, 4, 5 | Bonus life: **50000 and every 80000**, 30000 and every 70000. Difficulty: eight steps, **easiest** by default. Demo sounds: off, **on** |
+| Roc'n Rope | The same sixteen choices | **3**, 4, 5 | Difficulty: sixteen steps, **5** by default. First bonus life: **20000** to 80000 in steps of 10000. Next bonus life: 40000, 50000, **60000**, 70000, 80000. Repeat bonus: no, **yes**. Demo sounds: off, **on** |
+| Tutankham | The same sixteen choices | **3**, 4, 5 | Bonus life: **30000**, 40000. Difficulty: easy, **normal**, hard, hardest. Flash bomb: **1 per life**, 1 per game. Demo sounds: off, **on** |
+| Circus Charlie | The same sixteen choices | **3**, 4, 5, 7 | Bonus life: **20000, 90000 and every 70000**, 30000, 110000 and every 80000. Difficulty: easy, **normal**, hard, hardest. Demo sounds: off, **on** |
+| Gyruss | The same sixteen choices | 3, 4, **5** | Bonus life: **30000, 90000 and every 60000**, 40000, 110000 and every 70000. Difficulty: eight steps, **2** by default. Demo sounds: off, **on**. Demo music: off, **on** |
+| Bomb Jack | **1 for 1**, 1 for 2, 1 for 3, 1 for 6 | 2, **3**, 4, 5 | Bird speed: easy, medium, **hard**, hardest. Enemies: easy, medium, **hard**, hardest. Special coin: **easy**, hard. Demo sounds: off, **on** |
+| Pinball Action | 2 for 1, **1 for 1**, 1 for 2, 1 for 3 | Balls: 2, **3**, 4, 5 | Bonus ball: seven choices, **70000 and 200000** among them, or none. Extra: **easy**, hard. Flippers: **easy**, medium, hard, hardest. Outlanes: **easy**, medium, hard, hardest. Demo sounds: off, **on** |
+| Star Force | 2 for 1, **1 for 1**, 1 for 2, 1 for 3 | 2, **3**, 4, 5 | Bonus life: seven choices, **50000** among them, or none. Difficulty: six steps, **easiest** by default. Demo sounds: off, **on** |
+| BurgerTime | 2 for 1, **1 for 1**, 1 for 2, 1 for 3 | **3**, 5 | Bonus life: 10000, 15000, **20000**, 30000. Enemies: **4**, 6. End-of-level pepper: no, **yes** |
+| Bump 'n' Jump | 2 for 1, **1 for 1**, 1 for 2, 1 for 3 | **3**, 5 | Bonus life: **every 30000**, every 70000, 20000 only, 30000 only. Continue: no, **yes**. Difficulty: **easy**, hard |
+
+The remaining games:
+
+| Game | Coinage (coins for credits) | Lives | Other settings |
+| --- | --- | --- | --- |
+| Vanguard | 2 for 2, 1 for 1 and 2 for 3, **1 for 2**, 1 for 2 and 2 for 5, 1 for 3, 1 for 3 and 2 for 7, 1 for 4, 1 for 6 and 2 for 13, 1 for 7 | **3**, 4, 5 | None |
+| Fantasy | The same as Vanguard | **3**, 4, 5 | Continue: no, **yes** |
+| Nibbler | 2 for 1, 2 for 1 and 4 for 3, **1 for 1**, 1 for 1 and 2 for 3 | **3**, 4, 5, 6 | Free play: **off**, on. Difficulty: **easy**, hard |
+| Space Invaders | Not available | **3**, 4, 5, 6 | Bonus life: 1000, **1500**. Show coinage: off, **on** |
+| Donkey Kong 3 | 3 for 1, 2 for 1, **1 for 1**, 1 for 2, 1 for 3, 1 for 4, 1 for 5, 1 for 6 | **3**, 4, 5, 6 | Bonus life: **30000**, 40000, 50000, none. Next bonus life: **30000**, 40000, 50000, none. Difficulty: four steps, **easiest** by default |
+| 1942 | 4 for 1, 3 for 1, 2 for 1, **1 for 1**, 2 for 3, 1 for 2, 1 for 4, free play | 1, **2**, 3, 5 | Bonus life: **20000, 80000 and every 80000**, 20000, 100000 and every 100000, 30000, 80000 and every 80000, 30000, 100000 and every 100000. Difficulty: easy, **normal**, difficult, very difficult |
+| Mappy | 3 for 1, 2 for 1, 3 for 2, **1 for 1**, 2 for 3, 1 for 2, 1 for 3, 1 for 6 | 1, 2, **3**, 5 | Difficulty: eight ranks from **A** to H. Demo sounds: off, **on** |
+| The Tower of Druaga | 3 for 1, 2 for 1, **1 for 1**, 1 for 2 | 1, 2, 3, **5** | None |
+| Gaplus | 3 for 1, 2 for 1, **1 for 1**, 1 for 2 | 2, **3**, 4, 5 | Bonus life: eight choices, **50000, 150000 and every 150000** among them. Difficulty: **standard**, or seven steps from easiest to hardest. Demo sounds: off, **on** |
+| Xevious | 2 for 1, **1 for 1**, 2 for 3, 1 for 2 | 1, 2, **3**, 5 | Difficulty: easy, **normal**, hard, hardest. Flag bonus: no, **yes** |
+
+On the boards of Scramble, Super Cobra, Turtles, Anteater and Frogger, one switch sets the coinage of all coin slots together. The coin button is the first slot, so the table lists what each setting does there; settings that differ only for another slot are offered once. The version of Bagman that is emulated gives 1 credit per coin whatever its coinage switch is set to, so that switch is not offered. Space Invaders has no coinage switch.
+
+The coinage of Vanguard and Fantasy is set by two switches, which together give the nine choices of the menu row. Some of them give more credits for two coins than for one: with "1 coin 2 credits, 2 for 5", one coin gives 2 credits and two coins give 5. With "2 coins, 2 credits", a single coin gives no credit. The default, as before, is 1 coin for 2 credits; with MAME's default setting, one coin gives 1 credit and two coins give 3.
+
+The bonus life is not available in Galaga, Dig Dug, Mappy and Xevious because its switches have another meaning with 5 lives, while the choices of a menu row are fixed. It stays at its default setting: in Galaga 20000, 70000 and every 70000, or with 5 lives 30000, 120000 and every 120000; in Dig Dug 20000 and 60000, or with 5 lives only 20000; in Mappy 30000 and 100000; in Xevious 20000, 60000 and every 60000, or with 5 lives 20000, 70000 and every 70000. Bomb Jack has bonus life switches, but the game does not use them.
+
+The following switches are not offered: flip screen and cabinet, because the flipped picture of a cocktail cabinet is not emulated; service mode; freeze, rack test, 1942's screen stop and Gaplus's round advance, which are meant for testing the machine; the invulnerability of Van-Van Car and the 255 or more lives of Scramble, Turtles, Amidar, Frogger, Time Pilot, Pooyan, Roc'n Rope, Tutankham and Gyruss, which are cheats; Nibbler's debug inputs; switches whose purpose is not known, and settings that repeat another; and the second coin slot of the games that have one, because there is one coin button. Moon Cresta's free play, a setting of that slot, is offered on a row of its own.
+
+The choices are kept per game on the SD card, in `/SAVES/GALAGINO/<folder>.DIP` (for example `/SAVES/GALAGINO/GALAGA.DIP`), a short text file with a line per bank of switches, such as `dsw0=c9`. Without the file, or when it cannot be read, the game uses its defaults, so deleting the file restores them. Anything in the file that is not a choice of a menu row is ignored.
 
 ***
 
 ## High scores
 
-As in GalaginoPlus, the high score table of each game is kept on the SD card, in `/SAVES/GALAGINO/<folder>.HI` (for example `/SAVES/GALAGINO/GALAGA.HI`), and put back into the game the next time it is played. The tables are those of MAME's `hiscore.dat`. The board checks the table every five seconds and writes the file when it has changed, and again before the game is reset, left or the settings menu is opened. Deleting a file resets that game's table.
+As in GalaginoPlus, the high score table of each game is kept on the SD card, in `/SAVES/GALAGINO/<folder>.HI` (for example `/SAVES/GALAGINO/GALAGA.HI`), and put back into the game the next time it is played. The tables are those of MAME's `hiscore.dat`. The board checks the table every five seconds and writes the file when it has changed, and again before the game is reset, left or the settings menu is opened. Deleting a file resets that game's table. A game has one table whatever its [DIP switches](#dip-switches) are set to, so scores made at different settings are kept together.
 
 ***
 

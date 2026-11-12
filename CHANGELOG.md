@@ -13,6 +13,19 @@ Arcade games for RP2350 boards with DVI/HDMI output: Pac-Man, Galaga, Donkey Kon
 
 # Changelog
 
+## v0.3
+
+- The DIP switches of every game can now be changed in the settings menu while the game runs: coins per credit, lives and, depending on the game, the bonus life, difficulty, demo sounds and more. Saving a change restarts the game. The choices are kept per game on the SD card. The readme lists them.
+- New setting *Disable PSRAM*, for testing on a board with PSRAM how the games run without it. Saving a change restarts the board.
+- The games now run on the [Pico Computer 3](https://github.com/UKTailwind/Pico-Computer-3): HDMI, sound through HDMI or the audio jack, USB controllers, PSRAM, and NES or SNES controllers and a Wii Classic controller on the I/O header. The pin assignment may still change. See [Pico Computer 3](https://github.com/PicoPlus-devel/pico-infonesPlus#pico-computer-3) in the pico-infonesPlus readme. Thanks to @javavi.
+- The games now run on a PCB for the Waveshare RP2350-PiZero, designed by @szuping: HDMI, sound through HDMI or the audio jack, a USB controller on the PIO-USB port, NES and SNES controller ports, and a socket for an ESP32 module that connects Bluetooth controllers through [BlueRetro](https://github.com/darthcloud/blueretro). The PCB design is not yet available. See [PCB with Waveshare RP2350-PiZero](https://github.com/PicoPlus-devel/pico-infonesPlus#pcb-with-waveshare-rp2350-pizero) in the pico-infonesPlus readme.
+- Fixed: Xevious, Gaplus, Mappy and The Tower of Druaga could show missing text or wrong colors when started after another game.
+- Fixed: Pengo gave two credits for each coin instead of one.
+- Fixed: 1942 missed coins when several were inserted in quick succession.
+- NES and SNES controllers on the controller ports are now read with the same timing as a real console, on all boards. Thanks to @javavi.
+- Under pico-bootLoader, the settings menu entry that goes back to the bootloader is now called **Return to boot loader**.
+- Fixed: on boards with HSTX video, with *Display Mode* set to DVI, the picture could randomly drop out, and now and then a single line was shown shifted to the right for one frame.
+
 ## v0.2.1
 
 - At start-up, a screen lists all the games while the board looks for their ROM sets on the SD card. Each title is colored by the result: found, in flash, missing or needs PSRAM. The screen then shows how many games can be played.
@@ -147,3 +160,23 @@ For more info about the Murmulator see https://murmulator.ru/.
 | Board | Binary |
 |:--|:--|
 | Olimex RP2040-PICO-PC with a Pico 2 | [picoGalagino_OlimexPicoPC_arm.uf2](https://github.com/PicoPlus-devel/pico-galagino/releases/latest/download/picoGalagino_OlimexPicoPC_arm.uf2) |
+
+### Pico Computer 3
+
+For more info about the Pico Computer 3 see https://github.com/UKTailwind/Pico-Computer-3
+
+| Board | Binary |
+|:--|:--|
+| Pico Computer 3 (PC3) | [picoGalagino_PicoComputer3_arm.uf2](https://github.com/PicoPlus-devel/pico-galagino/releases/latest/download/picoGalagino_PicoComputer3_arm.uf2) |
+
+### PCB Waveshare RP2350-PiZero
+
+For more info about this PCB, designed by Liu Szuping, see [PCB with Waveshare RP2350-PiZero](https://github.com/PicoPlus-devel/pico-infonesPlus#pcb-with-waveshare-rp2350-pizero). The PCB design is not yet available.
+
+| Board | Binary |
+|:--|:--|
+| Waveshare RP2350-PiZero (*) | [picoGalagino_WaveShareRP2350PiZeroLiuPCB_arm_piousb.uf2](https://github.com/PicoPlus-devel/pico-galagino/releases/latest/download/picoGalagino_WaveShareRP2350PiZeroLiuPCB_arm_piousb.uf2) |
+
+This binary is only for the RP2350-PiZero on this PCB.
+
+(*) If you fitted this board with PSRAM and it has a non-Winbond flash chip, apply the [flash_config fix](https://github.com/PicoPlus-devel/pico-infonesPlus#psram-with-a-non-winbond-flash-chip) before flashing the emulator.

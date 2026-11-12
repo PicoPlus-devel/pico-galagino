@@ -106,8 +106,7 @@ static uint8_t si_in(i8085_t *cpu, uint8_t port)
     }
     case 2:
     case 6:
-        /* MAME's defaults: 3 lives, bonus at 1500, coinage not shown */
-        return 0x00 | controls();
+        return gal.dip[0] | controls(); /* IN2's switches */
     default:
         return (uint8_t)(si.shift >> (8 - si.shift_count));
     }
@@ -179,6 +178,7 @@ static void run_lines(int from, int to)
 
 static int si_init(uint8_t *const *regions)
 {
+    gal.dip[0] = 0x00; /* IN2, MAME's defaults: 3 lives, bonus at 1500, coinage shown */
     memset(&si, 0, sizeof(si));
     si.rom = regions[0];
     si.cpu = (i8085_t *)gal_alloc(sizeof(i8085_t));
@@ -420,6 +420,18 @@ static const gal_hiscore_region_t si_hiscore[] = {
     {0x20f4, 2, 0x00, 0x00},
 };
 
+/* Space Invaders' DIP switches, as in MAME (IN2). */
+static const char *const si_lives_names[] = {"3", "4", "5", "6"};
+static const uint8_t si_lives_values[] = {0x00, 0x01, 0x02, 0x03};
+static const char *const si_bonus_names[] = {"1000", "1500"};
+static const uint8_t si_bonus_values[] = {0x08, 0x00};
+static const uint8_t si_coinage_values[] = {0x80, 0x00};
+static const gal_dip_t si_dips[] = {
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x03, si_lives_names, si_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 0, 0x08, si_bonus_names, si_bonus_values),
+    GAL_DIP_ROW("Show coinage", "On attract screen", 0, 0x80, gal_dip_off_on, si_coinage_values),
+};
+
 const gal_game_ops_t gal_invaders_ops = {
     .init = si_init,
     .reset = si_reset,
@@ -433,4 +445,6 @@ const gal_game_ops_t gal_invaders_ops = {
     .nhiscore = 1,
     .hs_read = si_hs_read,
     .hs_write = si_hs_write,
+    .dips = si_dips,
+    .ndips = sizeof(si_dips) / sizeof(si_dips[0]),
 };

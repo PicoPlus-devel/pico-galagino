@@ -18,7 +18,13 @@
  *   --play F       from frame F: fire every 16 frames, steer around
  *   --keys F:MASK  hold buttons MASK (GAL_BTN_*, hex) from frame F for 4 frames
  *   --no-psram     run as a board without PSRAM (the large games, 1942, then
- *                  need --flash)
+ *                  need --flash). The loader's scratch memory then comes from
+ *                  the SRAM arena, as main.cpp's ffAlloc does, and from a heap
+ *                  of --heap-kb only when that is full; more than that ends the
+ *                  run with exit code 4, as malloc panics on the board
+ *   --heap-kb N    that heap: default 11, what the Fruit Jam has free with the
+ *                  display running (13 KB) less what FatFs takes. A large game is
+ *                  copied into flash before the display starts: 47 KB there
  *   --flash FILE   a flash cache, kept in FILE between runs: a large game not
  *                  in it is copied into it first, as the board does after its
  *                  restart, and starts from it. The simulated flash checks
@@ -35,6 +41,17 @@
  *                  is started and, while no button is pressed, runs N seconds;
  *                  then the menu returns and picks the next one
  *                  (GALAGINO_ATTRACT_SECONDS)
+ *   --after GAME   first run GAME for 40 seconds, with a coin and some play, then
+ *                  the game menu, and start the game asked for after that, as on
+ *                  the board after Quit game: its output must not depend on it
+ *   --fill-memory N  fill the SRAM arena and the PSRAM block with the byte N before
+ *                  anything starts, as a board may find them: the same goes
+ *   --dip ROW=CHOICE    a game's DIP switch from its start: the row and the choice
+ *                  by number, as --dip-list shows them
+ *   --dip-at F:ROW=CHOICE  the same at frame F, then a restart, as saving a
+ *                  change in the settings menu does (high scores kept)
+ *   --dip-list     print the game's rows and exit, with an error when the
+ *                  switches do not hold a choice of each row (after --dip)
  *   --video FILE   every frame, as raw RGB24 (320x240, with --tall 640x480),
  *                  for ffmpeg -f rawvideo -pix_fmt rgb24 -s WxH -r 60 -i FILE
  *
@@ -137,7 +154,50 @@ static void host_close(void *ctx, void *f)
     fclose((FILE *)f);
 }
 
-static const gal_io_t io = {NULL, host_list_dir, host_open, host_size, host_read_at, host_close, NULL, NULL};
+/* The loader's scratch memory, see --no-psram */
+static int scratch_in_arena;
+static uint32_t heap_limit = 11 * 1024, heap_used, heap_peak;
+
+typedef struct
+{
+    size_t size;
+    size_t pad;
+} heap_block_t;
+
+static void *host_alloc(void *ctx, uint32_t size)
+{
+    (void)ctx;
+    if (scratch_in_arena)
+    {
+        void *p = gal_scratch_alloc(size);
+        if (p)
+            return p;
+        if (heap_used + size > heap_limit)
+        {
+            printf("OUT OF MEMORY: the loader wants %u more bytes, the heap has %u of %u in use\n", size, heap_used,
+                   heap_limit);
+            exit(4);
+        }
+    }
+    heap_block_t *b = malloc(sizeof(heap_block_t) + size);
+    b->size = size;
+    heap_used += size;
+    if (heap_used > heap_peak)
+        heap_peak = heap_used;
+    return b + 1;
+}
+
+static void host_free(void *ctx, void *p)
+{
+    (void)ctx;
+    if (gal_scratch_free(p))
+        return;
+    heap_block_t *b = (heap_block_t *)p - 1;
+    heap_used -= (uint32_t)b->size;
+    free(b);
+}
+
+static const gal_io_t io = {NULL, host_list_dir, host_open, host_size, host_read_at, host_close, host_alloc, host_free};
 
 /* --- a simulated flash for the store ---------------------------------------- */
 
@@ -219,6 +279,54 @@ static void hiscore_load(const char *dir, int game)
         printf("high scores: read %s\n", path);
     }
     fclose(f);
+}
+
+/* --- DIP switches ---------------------------------------------------------- */
+
+#define MAX_DIPS 16
+
+typedef struct
+{
+    int frame; /* -1: from the start */
+    int row, choice;
+} dip_set_t;
+
+static dip_set_t dip_sets[MAX_DIPS];
+static int ndip_sets;
+
+static int dip_apply(const dip_set_t *s)
+{
+    const gal_dip_t *rows = NULL;
+    const int n = gal_dip_rows(&rows);
+    if (s->row < 0 || s->row >= n || s->choice < 0 || s->choice >= rows[s->row].count)
+    {
+        fprintf(stderr, "no DIP switch row %d choice %d\n", s->row, s->choice);
+        return 0;
+    }
+    gal_dip_select(&rows[s->row], gal_dip_ports(), s->choice);
+    printf("DIP switch %s: %s\n", rows[s->row].label, rows[s->row].names[s->choice]);
+    return 1;
+}
+
+/* Returns the number of rows that do not hold one of their choices. */
+static int dip_list(int game)
+{
+    const gal_dip_t *rows = NULL;
+    const int n = gal_dip_rows(&rows);
+    int bad = 0;
+    printf("%s: %d DIP switch rows\n", gal_games[game].title, n);
+    for (int k = 0; k < n; k++)
+    {
+        const int cur = gal_dip_choice(&rows[k], gal_dip_ports());
+        printf("  %d %-12s port %d mask %02x:", k, rows[k].label, rows[k].port, rows[k].mask);
+        for (int c = 0; c < rows[k].count; c++)
+            printf(" %d=%s%s%s", c, c == cur ? "[" : "", rows[k].names[c], c == cur ? "]" : "");
+        printf("\n");
+        bad += cur < 0;
+    }
+    for (int p = 0; p < GAL_DIP_PORTS; p++)
+        printf("  port %d: %02x\n", p, gal_dip_ports()[p]);
+    return bad;
 }
 
 /* --- output helpers ------------------------------------------------------ */
@@ -343,7 +451,10 @@ static uint32_t start_game(int game, const char *romroot, const char *flash_path
         /* the board restarts and copies the set before its display starts */
         double t0 = now_s();
         flash_erased = flash_programmed = 0;
+        const uint32_t heap_with_display = heap_limit;
+        heap_limit = 47 * 1024; /* before the display starts */
         gal_flash_copy((gal_game_id_t)game, &io, dir);
+        heap_limit = heap_with_display;
         printf("flash cache: %s, %u KB erased, %u KB programmed, %d errors, %.0f ms, holds %llx\n",
                gal_flash_holds((gal_game_id_t)game) ? "copied" : "COPY FAILED", flash_erased / 1024,
                flash_programmed / 1024, flash_errors, (now_s() - t0) * 1000, (unsigned long long)gal_flash_games());
@@ -355,9 +466,9 @@ static uint32_t start_game(int game, const char *romroot, const char *flash_path
     }
     double t0 = now_s();
     uint32_t found = gal_start((gal_game_id_t)game, &io, dir);
-    printf("%s: start %s in %.1f ms, arena %u of %u bytes, PSRAM %u of %u bytes\n", gal_games[game].title,
-           gal_running() == game ? "ok" : "FAILED", (now_s() - t0) * 1000, gal_arena_peak(), gal_arena_size(),
-           gal_psram_peak(), gal_psram_size());
+    printf("%s: start %s in %.1f ms, arena %u of %u bytes, PSRAM %u of %u bytes, loader's heap %u bytes\n",
+           gal_games[game].title, gal_running() == game ? "ok" : "FAILED", (now_s() - t0) * 1000, gal_arena_peak(),
+           gal_arena_size(), gal_psram_peak(), gal_psram_size(), heap_peak);
     if (gal_running() == game && hiscore_dir)
         hiscore_load(hiscore_dir, game);
     return found;
@@ -478,6 +589,7 @@ int main(int argc, char **argv)
     int attract_now = 0, rotate = -1, live = 0, scale = 0, mute = 0;
     const char *video_path = NULL;
     const char *flash_path = NULL, *hiscore_dir = NULL;
+    int dip_list_only = 0, after_game = -1, fill_memory = -1;
     int key_at[MAX_KEYS], key_mask[MAX_KEYS], nkeys = 0;
     const char *wav_path = NULL;
     for (; a < argc; a++)
@@ -500,6 +612,8 @@ int main(int argc, char **argv)
             start_at = atoi(argv[++a]);
         else if (!strcmp(argv[a], "--play") && a + 1 < argc)
             play_at = atoi(argv[++a]);
+        else if (!strcmp(argv[a], "--heap-kb") && a + 1 < argc)
+            heap_limit = (uint32_t)atoi(argv[++a]) * 1024;
         else if (!strcmp(argv[a], "--no-psram"))
             no_psram = 1;
         else if (!strcmp(argv[a], "--flash") && a + 1 < argc)
@@ -518,6 +632,25 @@ int main(int argc, char **argv)
             video_path = argv[++a];
         else if (!strcmp(argv[a], "--seed") && a + 1 < argc)
             srand((unsigned)atoi(argv[++a]));
+        else if (!strcmp(argv[a], "--after") && a + 1 < argc)
+            after_game = game_by_name(argv[++a]);
+        else if (!strcmp(argv[a], "--fill-memory") && a + 1 < argc)
+            fill_memory = (int)strtol(argv[++a], NULL, 0);
+        else if (!strcmp(argv[a], "--dip") && a + 1 < argc && ndip_sets < MAX_DIPS)
+        {
+            dip_set_t *s = &dip_sets[ndip_sets];
+            s->frame = -1;
+            if (sscanf(argv[++a], "%d=%d", &s->row, &s->choice) == 2)
+                ndip_sets++;
+        }
+        else if (!strcmp(argv[a], "--dip-at") && a + 1 < argc && ndip_sets < MAX_DIPS)
+        {
+            dip_set_t *s = &dip_sets[ndip_sets];
+            if (sscanf(argv[++a], "%d:%d=%d", &s->frame, &s->row, &s->choice) == 3)
+                ndip_sets++;
+        }
+        else if (!strcmp(argv[a], "--dip-list"))
+            dip_list_only = 1;
         else if (!strcmp(argv[a], "--keys") && a + 1 < argc && nkeys < MAX_KEYS)
         {
             if (sscanf(argv[++a], "%d:%x", &key_at[nkeys], &key_mask[nkeys]) == 2)
@@ -568,8 +701,20 @@ int main(int argc, char **argv)
     /* --tall blends RGB555, as the HSTX driver does */
     gal_init(tall ? GAL_FMT_RGB555 : GAL_FMT_RGB565, SAMPLERATE);
     /* the board's PSRAM block */
-    if (!no_psram)
-        gal_set_psram(malloc(GAL_PSRAM_SIZE), GAL_PSRAM_SIZE);
+    void *psram_block = no_psram ? NULL : malloc(GAL_PSRAM_SIZE);
+    if (psram_block)
+        gal_set_psram(psram_block, GAL_PSRAM_SIZE);
+    scratch_in_arena = no_psram;
+    if (fill_memory >= 0)
+    {
+        /* all of the SRAM arena, nothing being in use yet */
+        const uint32_t room = gal_arena_size() - 16;
+        void *all = gal_scratch_alloc(room);
+        memset(all, fill_memory, room);
+        gal_scratch_free(all);
+        if (psram_block)
+            memset(psram_block, fill_memory, GAL_PSRAM_SIZE);
+    }
 
     if (flash_path)
     {
@@ -614,6 +759,31 @@ int main(int argc, char **argv)
     }
     else
     {
+        if (after_game >= 0)
+        {
+            static uint16_t fb_before[320 * 240];
+            int16_t audio_before[SAMPLES_PER_FRAME];
+            start_game(after_game, romroot, flash_path, NULL);
+            for (int i = 0; i < 2400; i++)
+            {
+                uint16_t b = 0;
+                if (i >= 1500 && i < 1504)
+                    b = GAL_BTN_COIN;
+                if (i >= 1600 && i < 1604)
+                    b = GAL_BTN_START;
+                if (i >= 1700)
+                    b = (uint16_t)(((i & 15) < 4 ? GAL_BTN_FIRE : 0) | (1 << ((i / 90) & 3)));
+                gal_run_frame(b, audio_before, SAMPLES_PER_FRAME);
+                gal_render(GAL_ORIENT_UPRIGHT, fb_before, 320);
+            }
+            gal_menu_init(installed, after_game);
+            for (int i = 0; i < 30; i++)
+            {
+                gal_menu_frame(0);
+                gal_menu_render(GAL_ORIENT_UPRIGHT, fb_before, 320, i == 0);
+            }
+            printf("%s runs next\n", gal_games[game].title);
+        }
         uint32_t found = start_game(game, romroot, flash_path, hiscore_dir);
         if (gal_running() != game)
         {
@@ -622,6 +792,11 @@ int main(int argc, char **argv)
                     printf("  missing: %s (crc %08x)\n", gal_games[game].files[i].name, gal_games[game].files[i].crc);
             return 2;
         }
+        for (int k = 0; k < ndip_sets; k++)
+            if (dip_sets[k].frame < 0 && !dip_apply(&dip_sets[k]))
+                return 1;
+        if (dip_list_only)
+            return dip_list(game) ? 3 : 0;
     }
 
     mkdir(outdir, 0755);
@@ -663,6 +838,25 @@ int main(int argc, char **argv)
     {
         int repaint = 0, leave = 0;
         uint16_t in = 0;
+        /* as saving a change in the settings menu does (main.cpp) */
+        int dip_restart = 0;
+        for (int k = 0; k < ndip_sets; k++)
+            if (dip_sets[k].frame == f && in_game >= 0)
+            {
+                if (!dip_apply(&dip_sets[k]))
+                    return 1;
+                dip_restart = 1;
+            }
+        if (dip_restart)
+        {
+            uint8_t table[GAL_HISCORE_MAX];
+            if (hiscore_dir && gal_hiscore_flush(table))
+                hiscore_save(hiscore_dir, in_game, table);
+            printf("frame %d: restart\n", f);
+            gal_reset();
+            if (hiscore_dir)
+                hiscore_load(hiscore_dir, in_game);
+        }
 #if HOST_SDL
         if (live)
             in |= live_input(pad, &leave);

@@ -44,6 +44,7 @@ static int ph_init(uint8_t *const *regions)
         [GAL_FMT_RGB555] = PHX_FMT_RGB555, [GAL_FMT_RGB444] = PHX_FMT_RGB444, [GAL_FMT_RGB565] = PHX_FMT_RGB565};
     phx_gfx_init(ph.gfx, ph.roms, fmt[gal.fmt]);
     phx_init(ph.m, ph.roms, gal.samplerate, ph.frame_samples);
+    gal.dip[0] = ph.m->dsw; /* phoenix.c's default: MAME's */
     return 1;
 }
 
@@ -74,6 +75,7 @@ static void ph_run_slice(int q)
     if (keys & GAL_BTN_EXTRA)
         in |= PHX_IN_SHIELD;
     ph.m->inputs = in;
+    ph.m->dsw = gal.dip[0]; /* the DIP switches, read by phoenix.c: set after gal_start too */
     phx_run_frame(ph.m, ph.audio);
     ph.audio_pos = 0;
 }
@@ -154,6 +156,20 @@ static const gal_hiscore_region_t ph_hiscore[] = {
     {0x4021, 1, 0x20, 0x20},
 };
 
+/* Phoenix's DIP switches (DSW0), as in MAME. Not offered: the cabinet and the
+ * two unknown switches. */
+static const char *const ph_coin_names[] = {"2 coins, 1 credit", "1 coin, 1 credit"};
+static const uint8_t ph_coin_values[] = {0x10, 0x00};
+static const char *const ph_lives_names[] = {"3", "4", "5", "6"};
+static const uint8_t ph_lives_values[] = {0x00, 0x01, 0x02, 0x03};
+static const char *const ph_bonus_names[] = {"3000 and 30000", "4000 and 40000", "5000 and 50000", "6000 and 60000"};
+static const uint8_t ph_bonus_values[] = {0x00, 0x04, 0x08, 0x0c};
+static const gal_dip_t ph_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x10, ph_coin_names, ph_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0x03, ph_lives_names, ph_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 0, 0x0c, ph_bonus_names, ph_bonus_values),
+};
+
 const gal_game_ops_t gal_phoenix_ops = {
     .init = ph_init,
     .reset = ph_reset,
@@ -168,4 +184,6 @@ const gal_game_ops_t gal_phoenix_ops = {
     .nhiscore = sizeof(ph_hiscore) / sizeof(ph_hiscore[0]),
     .hs_read = ph_hs_read,
     .hs_write = ph_hs_write,
+    .dips = ph_dips,
+    .ndips = sizeof(ph_dips) / sizeof(ph_dips[0]),
 };

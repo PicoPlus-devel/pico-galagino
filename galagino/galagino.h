@@ -180,6 +180,13 @@ void gal_init(gal_fmt_t fmt, int samplerate);
 void gal_set_psram(void *mem, uint32_t size);
 #define GAL_PSRAM_SIZE (384 * 1024)
 
+/* Scratch memory for the loader (gal_io_t.alloc) on a board without PSRAM: what
+ * the running game leaves free of the SRAM arena, where the heap may have little
+ * room once the display runs. NULL when it has none. Blocks are freed last first,
+ * as the loader does. gal_scratch_free returns false for a block not from here. */
+void *gal_scratch_alloc(uint32_t size);
+int gal_scratch_free(void *p);
+
 /* --- The flash cache, for boards without PSRAM --------------------------------
  * A large game, whose data does not fit in SRAM, runs from flash there: its
  * ROM regions as the loader builds them from the zips, and the tables built
@@ -291,6 +298,38 @@ int gal_hiscore_poll(uint8_t *out);
 
 /* The same, looked at now: before gal_stop or gal_reset. */
 int gal_hiscore_flush(uint8_t *out);
+
+/* --- DIP switches -------------------------------------------------------------
+ * The running game's switches, as rows of a menu. A port holds what the port of
+ * that name holds in MAME, so a row's values read as MAME's PORT_DIPSETTINGs.
+ * Only the switches listed are offered; a game without a table has no rows. The
+ * core keeps no defaults: after gal_start the ports hold what the game itself
+ * starts with. Keeping the choices is up to the board. */
+#define GAL_DIP_PORTS 3
+
+typedef struct
+{
+    const char *label;        /* "Lives" */
+    const char *help;         /* at most 40 characters */
+    uint8_t port;             /* index into the ports */
+    uint8_t mask;             /* its bits in that port */
+    uint8_t count;            /* its choices */
+    const char *const *names; /* what each choice is shown as */
+    const uint8_t *values;    /* the bits of each choice */
+} gal_dip_t;
+
+/* The running game's rows, and their number: 0 when it offers none. */
+int gal_dip_rows(const gal_dip_t **rows);
+
+/* The running game's ports (GAL_DIP_PORTS bytes), read by the game itself: a
+ * change counts from the next gal_reset. */
+uint8_t *gal_dip_ports(void);
+
+/* The choice these ports hold for a row, or -1 if they hold none of them. */
+int gal_dip_choice(const gal_dip_t *d, const uint8_t *ports);
+
+/* Puts a choice of a row into the ports. Other bits stay; -1 changes nothing. */
+void gal_dip_select(const gal_dip_t *d, uint8_t *ports, int choice);
 
 /* Draws the game area of the canvas (stride in pixels). */
 void gal_render(gal_orient_t orient, uint16_t *fb, int stride);

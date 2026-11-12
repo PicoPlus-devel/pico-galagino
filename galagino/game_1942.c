@@ -46,7 +46,6 @@ static struct
     uint8_t sound_latch;
     uint8_t ay_addr[2];
     uint8_t sub_cpu_reset;
-    uint8_t last_coin;
 } g42;
 
 /* --- Main CPU ---------------------------------------------------------------- */
@@ -68,13 +67,12 @@ static uint8_t GAL_HOT(m_read)(z80_t *cpu, uint16_t addr)
     case 0xc000: /* COIN1,COIN2,X,SERVICE1,X,START2,START1 */
     {
         uint8_t v = 0xff;
-        if ((keys & GAL_BTN_COIN) && !g42.last_coin)
+        if (keys & GAL_BTN_COIN) /* while held, as in MAME: a one-read pulse was lost now and then */
             v &= ~0x80;
         if (keys & GAL_BTN_START)
             v &= ~0x01;
         if (keys & GAL_BTN_START2)
             v &= ~0x02;
-        g42.last_coin = (keys & GAL_BTN_COIN) != 0;
         return v;
     }
     case 0xc001: /* P1: X,X,B2,B1,U,D,L,R */
@@ -98,9 +96,9 @@ static uint8_t GAL_HOT(m_read)(z80_t *cpu, uint16_t addr)
     case 0xc002: /* P2 */
         return 0xff;
     case 0xc003:
-        return (uint8_t)~_1942_DIP_A;
+        return gal.dip[0]; /* DSWA */
     case 0xc004:
-        return (uint8_t)~_1942_DIP_B;
+        return gal.dip[1]; /* DSWB */
     }
     return 0xff;
 }
@@ -267,6 +265,9 @@ static void g42_derive(int i, const uint8_t *src, uint32_t ofs, uint8_t *out, ui
 
 static int g42_init(uint8_t *const *regions)
 {
+    /* MAME's DSWA and DSWB: Galagino's settings (2 lives), its macros inverted */
+    gal.dip[0] = (uint8_t)~_1942_DIP_A;
+    gal.dip[1] = (uint8_t)~_1942_DIP_B;
     /* the CPUs' ROMs and the data read all the time go to SRAM */
     uint8_t *rom_main = (uint8_t *)gal_fast_alloc(0x8000);
     uint8_t *rom_sound = (uint8_t *)gal_fast_alloc(0x4000);
@@ -360,7 +361,6 @@ static void g42_reset(void)
     g42.sound_latch = 0;
     g42.ay_addr[0] = g42.ay_addr[1] = 0;
     g42.sub_cpu_reset = 0;
-    g42.last_coin = 0;
     for (int c = 0; c < 2; c++)
     {
         z80_init(&gal.cpu[c]);
@@ -622,6 +622,25 @@ static const gal_hiscore_region_t g42_hiscore[] = {
     {0xe028, 0x001, 0x01, 0x01},
 };
 
+/* 1942's DIP switches, as in MAME. Galagino starts with 2 lives. Not offered:
+ * the cabinet, flip screen, service mode, screen stop and coin slot B. */
+static const char *const g42_coin_names[] = {"4 coins, 1 credit", "3 coins, 1 credit", "2 coins, 1 credit", "1 coin, 1 credit",
+                                             "2 coins, 3 credits", "1 coin, 2 credits", "1 coin, 4 credits", "Free play"};
+static const uint8_t g42_coin_values[] = {0x01, 0x02, 0x04, 0x07, 0x03, 0x06, 0x05, 0x00};
+static const char *const g42_lives_names[] = {"1", "2", "3", "5"};
+static const uint8_t g42_lives_values[] = {0x80, 0x40, 0xc0, 0x00};
+static const char *const g42_bonus_names[] = {"20k 80k, every 80k", "20k 100k, every 100k", "30k 80k, every 80k",
+                                              "30k 100k, every 100k"};
+static const uint8_t g42_bonus_values[] = {0x30, 0x20, 0x10, 0x00};
+static const char *const g42_difficulty_names[] = {"Easy", "Normal", "Difficult", "Very difficult"};
+static const uint8_t g42_difficulty_values[] = {0x40, 0x60, 0x20, 0x00};
+static const gal_dip_t g42_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", 0, 0x07, g42_coin_names, g42_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", 0, 0xc0, g42_lives_names, g42_lives_values),
+    GAL_DIP_ROW("Bonus life", "Extra life at", 0, 0x30, g42_bonus_names, g42_bonus_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", 1, 0x60, g42_difficulty_names, g42_difficulty_values),
+};
+
 const gal_game_ops_t gal_1942_ops = {
     .init = g42_init,
     .reset = g42_reset,
@@ -639,6 +658,8 @@ const gal_game_ops_t gal_1942_ops = {
     .derive = g42_derive,
     .hiscore = g42_hiscore,
     .nhiscore = sizeof(g42_hiscore) / sizeof(g42_hiscore[0]),
+    .dips = g42_dips,
+    .ndips = sizeof(g42_dips) / sizeof(g42_dips[0]),
 };
 
 #ifdef GAL_CONV_CHECK

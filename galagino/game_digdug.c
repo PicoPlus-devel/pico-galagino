@@ -38,12 +38,17 @@ static struct
     uint8_t namco_mode;
     uint8_t namco_nmi_counter;
     uint8_t namco_credit;
+    gal_51xx_coinage_t coinage;
     uint16_t keymask_d[3];
 
     uint8_t irq_enable[3];
     uint8_t sub_cpu_reset;
     uint8_t video_latch;
 } dd;
+
+/* MAME's DIP switch ports, in gal.dip */
+#define DD_DSWA 0
+#define DD_DSWB 1
 
 /* --- The 06xx/51xx (emulation.c namco_read_dd / namco_write_dd) ------------ */
 
@@ -59,6 +64,8 @@ static void namco_write_dd(uint16_t addr, uint8_t value)
         /* any command other than 0x10 triggers an NMI to the main CPU after ~50us */
         dd.namco_nmi_counter = (value != 0x10) ? NAMCO_NMI_DELAY : 0;
     }
+    else if ((dd.namco_command & 0x1f) == 0x01) /* a write to the 51xx: the coinage */
+        gal_51xx_write(&dd.coinage, value);
 }
 
 static uint8_t namco_read_dd(uint16_t addr)
@@ -75,7 +82,7 @@ static uint8_t namco_read_dd(uint16_t addr)
     const uint16_t keymask_p = (keymask ^ dd.keymask_d[2]) & keymask;
 
     if ((dd.keymask_d[0] & GAL_BTN_COIN) && !(dd.keymask_d[1] & GAL_BTN_COIN) && dd.namco_credit < 99)
-        dd.namco_credit++;
+        dd.namco_credit = gal_51xx_coin(&dd.coinage, dd.namco_credit);
     /* this decrease of credit actually triggers the game start */
     if ((dd.keymask_d[0] & GAL_BTN_START) && !(dd.keymask_d[1] & GAL_BTN_START) && dd.namco_credit > 0)
         dd.namco_credit--;
@@ -144,9 +151,9 @@ static uint8_t namco_read_dd(uint16_t addr)
     else if (dd.namco_command == 0xd2)
     {
         if ((addr & 15) == 0)
-            return (uint8_t)~DIGDUG_DIP_A; /* DSW0 */
+            return gal.dip[DD_DSWA];
         if ((addr & 15) == 1)
-            return (uint8_t)~DIGDUG_DIP_B; /* DSW1 */
+            return gal.dip[DD_DSWB];
     }
     else if (dd.namco_command == 0xb1)
     {
@@ -264,6 +271,10 @@ static void dd_conv_chars(const uint8_t *rom, uint16_t *out)
 
 static int dd_init(uint8_t *const *regions)
 {
+    /* Galagino's settings: its macros are MAME's ports, inverted. Unlike MAME's
+     * defaults, demo sounds are off. */
+    gal.dip[DD_DSWA] = (uint8_t)~DIGDUG_DIP_A;
+    gal.dip[DD_DSWB] = (uint8_t)~DIGDUG_DIP_B;
     for (int c = 0; c < 3; c++)
         dd.rom[c] = regions[c];
     dd.playfield = regions[4];
@@ -322,6 +333,7 @@ static void dd_reset(void)
     dd.namco_mode = 0;
     dd.namco_nmi_counter = 0;
     dd.namco_credit = 0;
+    gal_51xx_reset(&dd.coinage);
     memset(dd.keymask_d, 0, sizeof(dd.keymask_d));
     memset(dd.irq_enable, 0, sizeof(dd.irq_enable));
     dd.sub_cpu_reset = 1;
@@ -527,6 +539,28 @@ static const gal_hiscore_region_t dd_hiscore[] = {
     {0x89a0, 0x25, 0x01, 0x01},
 };
 
+/* Dig Dug's DIP switches, as in MAME. The coin button is the first slot, MAME's
+ * Coin A, so Coin B is not offered. Nor is the bonus life: its bits mean
+ * something else with 5 lives, and a row's names are fixed. */
+static const char *const dd_coin_names[] = {"2 coins, 1 credit", "1 coin, 1 credit", "2 coins, 3 credits", "1 coin, 2 credits"};
+static const uint8_t dd_coin_values[] = {0x40, 0x00, 0xc0, 0x80};
+static const char *const dd_lives_names[] = {"1", "2", "3", "5"};
+static const uint8_t dd_lives_values[] = {0x00, 0x40, 0x80, 0xc0};
+static const char *const dd_difficulty_names[] = {"Easy", "Medium", "Hard", "Hardest"};
+static const uint8_t dd_difficulty_values[] = {0x00, 0x02, 0x01, 0x03};
+static const char *const dd_off_on_names[] = {"OFF", "ON"};
+static const uint8_t dd_demo_values[] = {0x10, 0x00};
+static const char *const dd_no_yes_names[] = {"No", "Yes"};
+static const uint8_t dd_continue_values[] = {0x08, 0x00};
+
+static const gal_dip_t dd_dips[] = {
+    GAL_DIP_ROW("Coinage", "Coins per credit", DD_DSWB, 0xc0, dd_coin_names, dd_coin_values),
+    GAL_DIP_ROW("Lives", "Lives at start", DD_DSWA, 0xc0, dd_lives_names, dd_lives_values),
+    GAL_DIP_ROW("Difficulty", "Game difficulty", DD_DSWB, 0x03, dd_difficulty_names, dd_difficulty_values),
+    GAL_DIP_ROW("Demo sounds", "Sound in attract", DD_DSWB, 0x10, dd_off_on_names, dd_demo_values),
+    GAL_DIP_ROW("Continue", "Continue a game", DD_DSWB, 0x08, dd_no_yes_names, dd_continue_values),
+};
+
 const gal_game_ops_t gal_digdug_ops = {
     .init = dd_init,
     .reset = dd_reset,
@@ -538,6 +572,8 @@ const gal_game_ops_t gal_digdug_ops = {
     .view_h = GAL_H,
     .hiscore = dd_hiscore,
     .nhiscore = sizeof(dd_hiscore) / sizeof(dd_hiscore[0]),
+    .dips = dd_dips,
+    .ndips = sizeof(dd_dips) / sizeof(dd_dips[0]),
 };
 
 #ifdef GAL_CONV_CHECK

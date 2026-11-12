@@ -51,6 +51,7 @@
 #include "wiipad.h"
 
 #include "galagino.h"
+#include "dipfile.h"
 
 // The standard 252 MHz clock (10x the 640x480 pixel clock).
 #define GALAGINO_CLOCKFREQ_KHZ 252000
@@ -176,6 +177,7 @@ static uint64_t lastFrameUs = 0;
         [MOPT_NES_PALETTE] = 0,   /* NES */                                             \
         [MOPT_BUTTON_LAYOUT] = 0, /* NES */                                             \
         [MOPT_TATE_MODE] = 1,     /* the games are vertical */                          \
+        [MOPT_DISABLE_PSRAM] = 2, /* showSettingsMenu(true) in the game menu as well */ \
     }
 
 int8_t g_settings_visibility_galagino_game[MOPT_COUNT] = GALAGINO_VISIBILITY(1);
@@ -466,20 +468,29 @@ static void ffClose(void *ctx, void *file)
 }
 
 // The loader's scratch buffers go where f_malloc puts them: PSRAM on the boards
-// that have it. There, SRAM is not claimed at boot (see claimHeap() in
-// pico_shared) and the display and audio buffers leave little of the heap, so a
-// 16 KB loose 1942 file, or a zip entry plus the inflate state, made malloc
-// panic. Without PSRAM f_malloc is malloc over the whole claimed heap.
+// that have it. Without PSRAM f_malloc is malloc, and the display and audio
+// buffers can leave little of the heap (about 13 KB on the Fruit Jam with Disable
+// PSRAM), so a 16 KB loose 1942 file, or a zip entry plus the inflate state, would
+// make malloc panic. There they come from the free part of the game's SRAM arena,
+// and from the heap only when that is full: when a large game is copied into flash,
+// which runs before the display starts, with the heap still free.
 static void *ffAlloc(void *ctx, uint32_t size)
 {
     (void)ctx;
+    if (!Frens::isPsramEnabled())
+    {
+        void *p = gal_scratch_alloc(size);
+        if (p)
+            return p;
+    }
     return Frens::f_malloc(size);
 }
 
 static void ffFree(void *ctx, void *p)
 {
     (void)ctx;
-    Frens::f_free(p);
+    if (!gal_scratch_free(p))
+        Frens::f_free(p);
 }
 
 static const gal_io_t romIo = {nullptr, ffListDir, ffOpen, ffSize, ffReadAt, ffClose, ffAlloc, ffFree};
@@ -534,11 +545,13 @@ static int takePendingCopy(bool *attract)
     return game < GAL_GAME_COUNT ? (int)game : -1;
 }
 
-// Before initAll(): a restart for a copy is not a ROM picked in the browser.
+// Before initAll(): no restart of picoGalagino is a ROM picked in the browser: not
+// the one for a copy into flash, nor the one that applies Disable PSRAM
+// (writeFlashParamsToFlash() in pico_shared). Without this, initAll() runs flashrom()
+// on a board without PSRAM, with whatever another emulator left in ROMINFOFILE.
 static void clearRestartMark()
 {
-    if (watchdog_hw->scratch[0] == PENDING_COPY_MAGIC)
-        watchdog_hw->scratch[4] = 0; // the SDK's watchdog_enable() mark
+    watchdog_hw->scratch[4] = 0; // the SDK's watchdog_enable() mark
 }
 
 static void flashErase(uint32_t offset, uint32_t len)
@@ -737,8 +750,94 @@ static void hiscoreFlush()
         hiscoreSave();
 }
 
+// ---------------------------------------------------------------------------
+// The DIP switches: rows of the settings menu while a game that has a table runs
+// (menuSetEmulatorOptions in menu.h, the tables in the core), kept in a file per
+// game beside its high scores, GAMESAVEDIR/GALAGINO/<folder>.DIP. Saving a change
+// restarts the game, which then sees the switches from its start. The menu stops
+// the game while it is open, so the rows edit the ports the game reads directly.
+// ---------------------------------------------------------------------------
+static const gal_dip_t *dips = nullptr;
+static int ndips = 0;
+static bool dipsChanged = false;
+static MenuEmulatorOption dipOptions[MENU_MAX_EMULATOR_OPTIONS];
+
+static void dipPath(char *buf, size_t n, int game)
+{
+    snprintf(buf, n, HISCOREDIR "/%s.DIP", gal_games[game].folder);
+}
+
+static void saveDips()
+{
+    if (!sdOk)
+        return;
+    f_mkdir(GAMESAVEDIR);
+    f_mkdir(HISCOREDIR);
+    char path[48];
+    dipPath(path, sizeof(path), gal_running());
+    FIL *fil = (FIL *)Frens::f_malloc(sizeof(FIL));
+    const bool ok = fil && dipFileSave(fil, path, dips, ndips, gal_dip_ports());
+    Frens::f_free(fil);
+    printf("DIP switches %s %s\n", ok ? "saved to" : "NOT saved to", path);
+}
+
+template <int K>
+static int dipGet()
+{
+    return gal_dip_choice(&dips[K], gal_dip_ports());
+}
+
+// Called for every row on SAVE, in order. The file is written at the last row,
+// not when the menu returns: saving a change of the clock or of Disable PSRAM
+// restarts the board from within the menu, after these calls.
+template <int K>
+static void dipSet(int choice)
+{
+    uint8_t *ports = gal_dip_ports();
+    const uint8_t was = ports[dips[K].port];
+    gal_dip_select(&dips[K], ports, choice);
+    if (ports[dips[K].port] != was)
+        dipsChanged = true;
+    if (K == ndips - 1 && dipsChanged)
+        saveDips();
+}
+
+static int (*const dipGets[MENU_MAX_EMULATOR_OPTIONS])(void) = {
+    dipGet<0>, dipGet<1>, dipGet<2>, dipGet<3>, dipGet<4>, dipGet<5>, dipGet<6>, dipGet<7>,
+};
+static void (*const dipSets[MENU_MAX_EMULATOR_OPTIONS])(int) = {
+    dipSet<0>, dipSet<1>, dipSet<2>, dipSet<3>, dipSet<4>, dipSet<5>, dipSet<6>, dipSet<7>,
+};
+
+// After gal_start: the rows of the game. The ports hold the game's defaults, for
+// DEFAULT to select, until the choices kept for it are read.
+static void startDips()
+{
+    ndips = gal_dip_rows(&dips);
+    if (ndips > MENU_MAX_EMULATOR_OPTIONS)
+        ndips = MENU_MAX_EMULATOR_OPTIONS;
+    dipsChanged = false;
+    if (!ndips)
+        return;
+    uint8_t *ports = gal_dip_ports();
+    for (int k = 0; k < ndips; k++)
+        dipOptions[k] = {dips[k].label, dips[k].help, dips[k].count, dips[k].names,
+                         gal_dip_choice(&dips[k], ports), dipGets[k], dipSets[k]};
+    if (sdOk)
+    {
+        char path[48];
+        dipPath(path, sizeof(path), gal_running());
+        FIL *fil = (FIL *)Frens::f_malloc(sizeof(FIL));
+        if (fil && dipFileLoad(fil, path, dips, ndips, ports))
+            printf("DIP switches read from %s\n", path);
+        Frens::f_free(fil);
+    }
+    menuSetEmulatorOptions(dipOptions, ndips);
+}
+
 static void enterMenu()
 {
+    menuSetEmulatorOptions(nullptr, 0); // the DIP switches are those of a running game
     gal_stop();
     if (!installed)
     {
@@ -770,6 +869,7 @@ static void startGame(int game, bool attract)
            (unsigned long)gal_psram_size());
     if (gal_running() == game)
     {
+        startDips();
         hiscoreLoad();
         state = State::Game;
         return;
@@ -1371,9 +1471,11 @@ static void processPerFrame()
         }
         if (state == State::Game)
         {
+            const bool newDips = dipsChanged;
+            dipsChanged = false;
             if (rval == 3) // Quit game: back to the game menu
                 enterMenu();
-            else if (rval == 5) // Reset Game
+            else if (rval == 5 || newDips) // Reset Game, or the DIP switches changed
             {
                 gal_reset();
                 hiscoreLoad();
