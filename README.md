@@ -294,12 +294,14 @@ All the games run on every board. The converted graphics of 1942 take about 230 
 | 13 | Murmulator M2 | HSTX | `picoGalagino_MurmulatorM2_arm.uf2` |
 | 14 | Adafruit Feather RP2350 with HSTX Port and TLV320DAC3100 I2S DAC | HSTX | `picoGalagino_AdafruitFeatherRP2350_TLV320DAC3100_arm_piousb.uf2` |
 | 15 | Olimex RP2040-PICO-PC with a Raspberry Pi Pico 2 | HSTX | `picoGalagino_OlimexPicoPC_arm.uf2` |
+| 17 | Pico Computer 3 | HSTX | `picoGalagino_PicoComputer3_arm.uf2` |
+| 18 | PCB for the Waveshare RP2350-PiZero | HSTX | `picoGalagino_WaveShareRP2350PiZeroLiuPCB_arm_piousb.uf2` |
 
 With *Tate mode* off, every line of the game is shown, scaled to the height of the screen. Boards with HSTX output mix two lines of the picture where a screen line falls between them; boards with PicoDVI output show each line of the picture on one or two screen lines. See [Display and tate mode](#display-and-tate-mode).
 
 For wiring and assembly instructions, see the setup sections of the [pico-infonesPlus README](https://github.com/PicoPlus-devel/pico-infonesPlus#setup). To flash a board, hold BOOTSEL while connecting it over USB, then copy the `.uf2` file onto the USB drive that appears.
 
-Audio is sent over HDMI. Boards with an I2S DAC (configurations 8, 13 and 14) can use it instead through the *External Audio* setting; on the Fruit Jam, plugging in headphones selects it automatically. Configuration 15 also plays the sound on its PWM audio jack.
+Audio is sent over HDMI. Boards with an I2S DAC (configurations 8, 13, 14, 17 and 18) can use it instead through the *External Audio* setting; on the Fruit Jam, plugging in headphones selects it automatically. Configuration 15 also plays the sound on its PWM audio jack.
 
 ***
 
@@ -361,7 +363,7 @@ Both pictures appear upright once the monitor is turned as described in the tabl
 
 ## Settings menu
 
-**SELECT + START** opens the settings menu. Besides *Tate mode*, it offers the screen mode with or without scanlines (on boards with HSTX output; PicoDVI boards have no scanlines), the FPS overlay, audio on/off, rapid fire on A and on B, the external audio output, the Fruit Jam volume and VU meter, the controller test, BOOTSEL mode and USB drive mode. In a game it also offers *Reset game*, *Quit game*, which returns to the game menu, and the game's [DIP switches](#dip-switches). When started from pico-bootLoader, it also offers *Return to emulator selection*. On boards with PSRAM it also offers *Disable PSRAM*.
+**SELECT + START** opens the settings menu. Besides *Tate mode*, it offers the screen mode with or without scanlines (on boards with HSTX output; PicoDVI boards have no scanlines), the FPS overlay, audio on/off, rapid fire on A and on B, the external audio output, the Fruit Jam volume and VU meter, the controller test, BOOTSEL mode and USB drive mode. In a game it also offers *Reset game*, *Quit game*, which returns to the game menu, and the game's [DIP switches](#dip-switches). When started from pico-bootLoader, it also offers *Return to boot loader*. On boards with PSRAM it also offers *Disable PSRAM*.
 
 The settings are stored on the SD card in `/settings_ARC.dat`, a file shared by all arcade games of this family. The games have no save states.
 
