@@ -299,10 +299,6 @@ All the games run on every board. The converted graphics of 1942 take about 230 
 
 The [PCB for the Waveshare RP2350-PiZero](https://github.com/PicoPlus-devel/pico-infonesPlus#pcb-with-waveshare-rp2350-pizero) (HW_CONFIG 18), designed by Liu Szuping:
 
-| <img src="docs/images/WaveShareRP2350PiZeroLiuPCB_top.jpg" width="380" alt="The PCB seen from above, with the RP2350-PiZero, the ESP32 module, two NES and two SNES controller ports"> | <img src="docs/images/WaveShareRP2350PiZeroLiuPCB_inuse.jpg" width="380" alt="The PCB in use, with a DualShock 4 controller"> |
-|:--:|:--:|
-| <img src="docs/images/WaveShareRP2350PiZeroLiuPCB_side.jpg" width="380" alt="The PCB seen from the side"> | <img src="docs/images/WaveShareRP2350PiZeroLiuPCB_front.jpg" width="380" alt="The front of the PCB, with its HDMI port below the RP2350-PiZero"> |
-
 With *Tate mode* off, every line of the game is shown, scaled to the height of the screen. Boards with HSTX output mix two lines of the picture where a screen line falls between them; boards with PicoDVI output show each line of the picture on one or two screen lines. See [Display and tate mode](#display-and-tate-mode).
 
 For wiring and assembly instructions, see the setup sections of the [pico-infonesPlus README](https://github.com/PicoPlus-devel/pico-infonesPlus#setup). To flash a board, hold BOOTSEL while connecting it over USB, then copy the `.uf2` file onto the USB drive that appears.
