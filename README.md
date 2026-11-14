@@ -297,7 +297,7 @@ All the games run on every board. The converted graphics of 1942 take about 230 
 | 17 | Pico Computer 3 | HSTX | `picoGalagino_PicoComputer3_arm.uf2` |
 | 18 | PCB for the Waveshare RP2350-PiZero | HSTX | `picoGalagino_WaveShareRP2350PiZeroLiuPCB_arm_piousb.uf2` |
 
-The [PCB for the Waveshare RP2350-PiZero](https://github.com/PicoPlus-devel/pico-infonesPlus#pcb-with-waveshare-rp2350-pizero) (HW_CONFIG 18), designed by Liu Szuping:
+The [PCB for the Waveshare RP2350-PiZero](https://github.com/PicoPlus-devel/pico-infonesPlus#pcb-with-waveshare-rp2350-pizero) (HW_CONFIG 18), designed by Liu Szuping.
 
 With *Tate mode* off, every line of the game is shown, scaled to the height of the screen. Boards with HSTX output mix two lines of the picture where a screen line falls between them; boards with PicoDVI output show each line of the picture on one or two screen lines. See [Display and tate mode](#display-and-tate-mode).
 
