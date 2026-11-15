@@ -25,6 +25,7 @@ Arcade games for RP2350 boards with DVI/HDMI output: Pac-Man, Galaga, Donkey Kon
 - NES and SNES controllers on the controller ports are now read with the same timing as a real console, on all boards. Thanks to @javavi.
 - Under pico-bootLoader, the settings menu entry that goes back to the bootloader is now called **Return to boot loader**.
 - Fixed: on boards with HSTX video, with *Display Mode* set to DVI, the picture could randomly drop out, and now and then a single line was shown shifted to the right for one frame.
+- Pico Computer 3 (updated 15 November 2026): the NES and SNES controllers on the I/O header moved to other pins. See [Pico Computer 3](https://github.com/PicoPlus-devel/pico-infonesPlus#pico-computer-3) in the pico-infonesPlus readme for the new pins, and download `picoGalagino_PicoComputer3_arm.uf2` again.
 
 ## v0.2.1
 
