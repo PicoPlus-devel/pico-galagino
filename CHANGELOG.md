@@ -13,6 +13,10 @@ Arcade games for RP2350 boards with DVI/HDMI output: Pac-Man, Galaga, Donkey Kon
 
 # Changelog
 
+## Next release
+
+- Built with Pico SDK 2.3.1. This leaves a little more memory free, about 4.4 KB.
+
 ## v0.3
 
 - The DIP switches of every game can now be changed in the settings menu while the game runs: coins per credit, lives and, depending on the game, the bonus life, difficulty, demo sounds and more. Saving a change restarts the game. The choices are kept per game on the SD card. The readme lists them.
