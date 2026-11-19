@@ -41,6 +41,9 @@
 #include "tusb.h"
 
 #include "FrensHelpers.h"
+// pico-bootLoader attract mode may start this application when there are arcade sets; Galagino picks the game
+// (bootloader builds only, see pico_shared/attract.h).
+FRENS_ATTRACT_DIRS("/roms/arcade");
 #include "FrensFonts.h"
 #include "gamepad.h"
 #include "menu.h"
@@ -1383,6 +1386,12 @@ static void attractNext()
 {
     printf("Attract mode: next game\n");
     hiscoreFlush();
+#if FRENS_ATTRACT_APP
+    // Started by pico-bootLoader's attract mode: the next one is the loader's
+    // pick, possibly another application.
+    if (Frens::attractActive())
+        Frens::attractNext();
+#endif
     attractGame = false;
     enterMenu();
     if (state == State::Menu)
@@ -1572,6 +1581,10 @@ static void processPerFrame()
         }
         break;
     case State::NoGames:
+#if FRENS_ATTRACT_APP
+        if (Frens::attractActive())
+            Frens::attractNext(); // nothing to show
+#endif
         break;
     }
 
@@ -1701,7 +1714,15 @@ int main()
         startGame(GALAGINO_AUTOSTART, false);
 #endif
     else if (installed)
+    {
         enterMenu();
+#if FRENS_ATTRACT_APP
+        // pico-bootLoader's attract mode started Galagino: its own attract
+        // mode picks the game at once, the reel running to it as usual.
+        if (state == State::Menu && Frens::attractActive())
+            gal_menu_attract_now();
+#endif
+    }
     else
     {
         state = State::NoGames;
