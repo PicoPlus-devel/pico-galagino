@@ -13,7 +13,9 @@ Arcade games for RP2350 boards with DVI/HDMI output: Pac-Man, Galaga, Donkey Kon
 
 # Changelog
 
-## Next release
+## v0.3_bl
+
+This version is built for [pico-bootLoader](https://github.com/PicoPlus-devel/pico-bootLoader) only, and is included in its SD-card archive. It has no release of its own: without pico-bootLoader, keep using v0.3.
 
 - **Attract mode.** pico-bootLoader's new attract mode can now start Galagino: its own attract reel plays at once, and when the time is up it returns to the loader. Press any button to play yourself.
 - Built with Pico SDK 2.3.1. This leaves a little more memory free, about 4.4 KB.
