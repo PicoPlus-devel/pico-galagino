@@ -41,6 +41,9 @@
 #include "tusb.h"
 
 #include "FrensHelpers.h"
+// pico-bootLoader attract mode may start this application when there are arcade sets; Galagino picks the game
+// (bootloader builds only, see pico_shared/attract.h).
+FRENS_ATTRACT_DIRS("/roms/arcade");
 #include "FrensFonts.h"
 #include "gamepad.h"
 #include "menu.h"
@@ -559,9 +562,16 @@ static void flashErase(uint32_t offset, uint32_t len)
     Frens::flashEraseSafe(offset, len);
 }
 
+// The progress screen during a copy (HDMI/HSTX only, see
+// Frens::flashProgressBegin()): bytes programmed against the size of the slot.
+static uint32_t copyDone = 0;
+static uint32_t copyTotal = 0;
+
 static void flashProgram(uint32_t offset, const uint8_t *data, uint32_t len)
 {
     Frens::flashProgramSafe(offset, data, len);
+    copyDone += len;
+    Frens::flashProgressUpdate(copyDone, copyTotal);
 }
 
 static void flashCopying(int game)
@@ -570,6 +580,9 @@ static void flashCopying(int game)
     led = !led;
     Frens::blinkLed(led);
     printf("Copying %s to flash\n", gal_games[game].title);
+    copyDone = 0;
+    copyTotal = gal_flash_slot_size((gal_game_id_t)game);
+    Frens::flashProgressBegin("Copying game to flash memory", gal_games[game].title);
 }
 
 static void openFlashCache()
@@ -616,8 +629,10 @@ static void prepareFlash()
     const uint64_t t0 = Frens::time_us();
     copyFound = gal_flash_copy((gal_game_id_t)game, &romIo, dir);
     copiedGame = game;
+    const bool ok = gal_flash_holds((gal_game_id_t)game);
+    Frens::flashProgressEnd(ok);
     printf("Copied %s to flash in %lu ms: %s\n", gal_games[game].title,
-           (unsigned long)((Frens::time_us() - t0) / 1000), gal_flash_holds((gal_game_id_t)game) ? "ok" : "FAILED");
+           (unsigned long)((Frens::time_us() - t0) / 1000), ok ? "ok" : "FAILED");
 }
 
 // Restarts the board to copy the game into flash; see above.
@@ -1383,6 +1398,12 @@ static void attractNext()
 {
     printf("Attract mode: next game\n");
     hiscoreFlush();
+#if FRENS_ATTRACT_APP
+    // Started by pico-bootLoader's attract mode: the next one is the loader's
+    // pick, possibly another application.
+    if (Frens::attractActive())
+        Frens::attractNext();
+#endif
     attractGame = false;
     enterMenu();
     if (state == State::Menu)
@@ -1572,6 +1593,10 @@ static void processPerFrame()
         }
         break;
     case State::NoGames:
+#if FRENS_ATTRACT_APP
+        if (Frens::attractActive())
+            Frens::attractNext(); // nothing to show
+#endif
         break;
     }
 
@@ -1701,7 +1726,15 @@ int main()
         startGame(GALAGINO_AUTOSTART, false);
 #endif
     else if (installed)
+    {
         enterMenu();
+#if FRENS_ATTRACT_APP
+        // pico-bootLoader's attract mode started Galagino: its own attract
+        // mode picks the game at once, the reel running to it as usual.
+        if (state == State::Menu && Frens::attractActive())
+            gal_menu_attract_now();
+#endif
+    }
     else
     {
         state = State::NoGames;
